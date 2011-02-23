@@ -1,0 +1,35 @@
+<!DOCTYPE phrases SYSTEM "entities.dtd">
+<epp:phrases xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:epp="http://eprints.org/ep3/phrase"
+	xmlns:epc="http://eprints.org/ep3/control">
+
+	<!-- phrases for the citation dataset -->
+	<epp:phrase id="datasetname_citation">Citation Data</epp:phrase>
+	<epp:phrase id="datasethelp_citation">Citation data obtained from external services</epp:phrase>
+	<epp:phrase id="citation_fieldname_datumid">Datum ID</epp:phrase>
+	<epp:phrase id="citation_fieldname_source">Data Source</epp:phrase>
+	<epp:phrase id="citation_fieldname_impact">Citation Count</epp:phrase>
+	<epp:phrase id="citation_fieldname_cluster">Identifier at Source</epp:phrase>
+	<epp:phrase id="citation_fieldname_referent_id">EPrint ID</epp:phrase>
+	<epp:phrase id="citation_fieldname_datestamp">Datestamp</epp:phrase>
+	<epp:phrase id="citation_fieldopt_source_scopus">Scopus</epp:phrase>
+	<epp:phrase id="citation_fieldopt_source_wos">Web of Science</epp:phrase>
+	<epp:phrase id="citation_fieldopt_source_gscholar">Google Scholar</epp:phrase>
+
+	<!-- phrases for eprint citation data fields -->
+	<epp:phrase id="eprint_fieldname_scopus">Scopus</epp:phrase>
+	<epp:phrase id="eprint_fieldname_scopus_impact">Citation Count</epp:phrase>
+	<epp:phrase id="eprint_fieldname_scopus_cluster">Scopus EID</epp:phrase>
+	<epp:phrase id="eprint_fieldhelp_scopus_cluster">Enter the electronic identifier for this paper. Enter "-" to suppress requests to Scopus for this paper.</epp:phrase>
+	<epp:phrase id="eprint_fieldname_scopus_datestamp">Retrieved from Scopus</epp:phrase>
+	<epp:phrase id="eprint_fieldname_wos">Web of Science</epp:phrase>
+	<epp:phrase id="eprint_fieldname_wos_impact">Citation Count</epp:phrase>
+	<epp:phrase id="eprint_fieldname_wos_cluster">Web of Science ID</epp:phrase>
+	<epp:phrase id="eprint_fieldhelp_wos_cluster">Enter the UT identifier for this paper. Enter "-" to suppress requests to Web of Science for this paper.</epp:phrase>
+	<epp:phrase id="eprint_fieldname_wos_datestamp">Retrieved from Web of Science</epp:phrase>
+	<epp:phrase id="eprint_fieldname_gscholar">Google Scholar™</epp:phrase>
+	<epp:phrase id="eprint_fieldname_gscholar_impact">Citation Count</epp:phrase>
+	<epp:phrase id="eprint_fieldname_gscholar_cluster">Google Scholar ID</epp:phrase>
+	<epp:phrase id="eprint_fieldhelp_gscholar_cluster">Enter the cluster ID for this paper. Enter "-" to suppress requests to Google Scholar for this paper.</epp:phrase>
+
+</epp:phrases>

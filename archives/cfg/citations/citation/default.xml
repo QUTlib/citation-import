@@ -1,0 +1,48 @@
+<?xml version="1.0" ?>
+
+<!-- 
+	Default citation style for, ahem, citation data.
+-->
+
+<cite:citation xmlns="http://www.w3.org/1999/xhtml" xmlns:cite="http://eprints.org/ep3/citation" xmlns:epc="http://eprints.org/ep3/control">
+  <table class="ep_block" style="margin-bottom: 1em" border="0" cellpadding="3">
+
+    <!-- datum id -->
+    <tr>
+      <th valign="top" class="ep_row"><epc:phrase ref="citation_fieldname_datumid" />:</th>
+      <td valign="top" class="ep_row"><epc:print expr="datumid" /></td>
+    </tr>
+
+    <!-- data source -->
+    <tr>
+      <th valign="top" class="ep_row"><epc:phrase ref="citation_fieldname_source" />:</th>
+      <td valign="top" class="ep_row"><epc:print expr="source" /></td>
+    </tr>
+
+    <!-- eprint id -->
+    <tr>
+      <th valign="top" class="ep_row"><epc:phrase ref="citation_fieldname_referent_id" />:</th>
+      <td valign="top" class="ep_row"><epc:print expr="referent_id" /></td>
+    </tr>
+
+    <!-- citation count -->
+    <tr>
+      <th valign="top" class="ep_row"><epc:phrase ref="citation_fieldname_impact" />:</th>
+      <td valign="top" class="ep_row"><epc:print expr="impact" /></td>
+    </tr>
+
+    <!-- identifer at source -->
+    <tr>
+      <th valign="top" class="ep_row"><epc:phrase ref="citation_fieldname_cluster" />:</th>
+      <td valign="top" class="ep_row"><epc:print expr="cluster" /></td>
+    </tr>
+
+    <!-- datestamp -->
+    <tr>
+      <th valign="top" class="ep_row"><epc:phrase ref="citation_fieldname_datestamp" />:</th>
+      <td valign="top" class="ep_row"><epc:print expr="datestamp" /></td>
+    </tr>
+
+
+  </table>
+</cite:citation>

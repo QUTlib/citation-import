@@ -1,0 +1,262 @@
+#!/usr/bin/perl -w -I/usr/local/eprints/perl_lib
+
+###############################################################################
+#
+# Import citation data
+#
+# This script is partly based on the generic import script, but has been
+# signficantly modified in order to make it suitable for running as a cron job,
+# and to provide a set of options more appropriate to gathering citation data.
+#
+###############################################################################
+
+=pod
+
+=head1 NAME
+
+B<import_citationdata> - Import citation data
+
+=head1 SYNOPSIS
+
+B<import_citationdata> I<repository_id> [B<options>] I<dataset> I<filename>
+
+=head1 DESCRIPTION
+
+This command imports citation data into the given dataset.
+
+=head1 ARGUMENTS
+
+=over 8
+
+=item I<repository_id> 
+
+The ID of the EPrint repository to import to.
+
+=item I<dataset>
+
+The dataset into which to import data. This may be one of I<scopus>, I<wos>
+or I<gscholar>
+
+=item I<filename>
+
+The name of a file containing one eprint ID per line, for which the command
+will attempt to gather citation data.
+
+=back
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<--log LOGFILE>
+
+Log output to LOGFILE. If there is no log file, messages will be written to
+standard output.
+
+=item B<--net-retry-max NUM>
+
+Re-try failed network requests up to NUM times (default 4).
+
+=item B<--net-retry-interval INT>
+
+Re-try failed network requests after INT seconds (default 900).
+
+=item B<--parse-retry-max NUM>
+
+Re-request an unparseable response up to NUM times (default 5).
+
+=item B<--parse-retry-interval INT>
+
+Re-request an unparseable response after INT seconds (default 360).
+
+=item B<--help>
+
+Print a brief help message and exit.
+
+=item B<--man>
+
+Print the full manual page and then exit.
+
+=item B<--quiet>
+
+Be vewwy vewwy quiet. This option will supress all output unless an error occurs.
+
+=item B<--verbose>
+
+Explain in detail what is going on.
+May be repeated for greater effect.
+
+Shows why a plugin is disabled.
+
+=back
+
+=cut
+
+use strict;
+use warnings;
+
+use Getopt::Long;
+use Pod::Usage;
+use strict;
+
+use EPrints;
+use QUT::EPrints::LogHandler;
+
+
+#
+# Set default parameters
+#
+my $logfile = undef;
+my $net_retry_max = 4;
+my $net_retry_interval = 900;
+my $parse_retry_max = 5;
+my $parse_retry_interval = 360;
+my $verbose = 0;
+my $quiet = 0;
+my $help = 0;
+my $man = 0;
+
+
+#
+# Parse the command line options
+#
+Getopt::Long::Configure("permute");
+GetOptions( 
+	'log=s' => \$logfile,
+	'net-retry-max=i' => \$net_retry_max,
+	'net-retry-interval=i' => \$net_retry_interval,
+	'parse-retry-max=i' => \$parse_retry_max,
+	'parse-retry-interval=i' => \$parse_retry_interval,
+	'help|?' => \$help,
+	'man' => \$man,
+	'verbose+' => \$verbose,
+	'quiet' => \$quiet,
+) || pod2usage( 2 );
+
+
+#
+# Print out help screens, if desired
+#
+pod2usage( 1 ) if $help;
+pod2usage( -exitstatus => 0, -verbose => 2 ) if $man;
+pod2usage( 2 ) if( scalar @ARGV != 3 );
+
+
+#
+# Configure verbosity
+#
+my $noise = 1;
+$noise = 0 if( $quiet );
+$noise = 1+$verbose if( $verbose );
+
+#
+# If we are logging to a file, set the "stderr" flag of the log handler so that
+# errors also go to STDERR. Otherwise, just send them to standard output.
+#
+my $stderr = 0;
+if ( defined $logfile )
+{
+	$stderr = 1;
+}
+
+
+#
+# Save the remaining arguments
+#
+my $repoid = shift @ARGV;
+my $datasetid = shift @ARGV;
+my $filename = shift @ARGV;
+
+
+#
+# Get an EPrints session and dataset object into which to import data
+#
+my $session = new EPrints::Session( 1, $repoid, $noise );
+if( !defined $session )
+{
+	print STDERR "Failed to load repository: $repoid\n";
+	exit 1;
+}
+my $ds = $session->get_repository->get_dataset( $datasetid ) ;
+if( !defined $ds )
+{
+	print STDERR "Unknown Dataset ID: $datasetid\n";
+	$session->terminate;
+	exit 1;
+}
+
+
+#
+# Create a plug-in for this dataset
+#
+my $pluginmap = $session->config( "datasets", "citation", "pluginmap" );
+my $plugin = undef;
+my $handler = new QUT::EPrints::LogHandler(
+	session => $session,
+	logfile => $logfile,
+	prefix => "$repoid $datasetid",
+	stderr => $stderr,
+);
+if ( !defined( $handler  ) )
+{
+	print STDERR "Could not open $logfile: $!";
+	$session->terminate();
+	exit 1;
+}
+if ( defined( $pluginmap ) && exists( $pluginmap->{$datasetid} ) )
+{
+	$plugin = $session->plugin(
+		$pluginmap->{$datasetid},
+		Handler => $handler,
+		net_retry => {
+			max => $net_retry_max,
+			interval => $net_retry_interval,
+		},
+		parse_retry => {
+			max => $parse_retry_max,
+			interval => $parse_retry_interval,
+		},
+	);
+	if ( !defined( $plugin ) )
+	{
+		# the plug-in itself should print an error message
+		$session->terminate();
+		exit 1;
+	}
+}
+else
+{
+	print STDERR "There is no import plug-in defined for dataset \"" . $datasetid . "\".\n";
+	$session->terminate();
+	exit 1;
+}
+if( $plugin->broken )
+{
+	print STDERR "Plugin " . $pluginmap->{$datasetid} . " could not run because:\n";
+	print STDERR $plugin->error_message."\n";
+	$session->terminate();
+	exit 1;
+}
+
+
+#
+# Go!
+#
+eval {
+$plugin->input_file(
+		dataset=>$ds,
+		filename=>$filename,
+	);
+};
+if( $@ )
+{
+	$handler->message( "error", $session->make_text( "Unhandled exception in ".$plugin->{id}.": $@" ) );
+}
+
+
+#
+# Clean up
+#
+$session->terminate();
+
+exit;
