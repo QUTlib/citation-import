@@ -384,7 +384,7 @@ close( $logfh );
 #
 # Use import_citationdata to perform the actual import
 #
-my @args = ( "/usr/local/eprints/bin/import_citationdata" );
+my @args = ( $EPrints::SystemSettings::conf->{"base_path"} . "/bin/import_citationdata" );
 push @args, $repoid;
 if ( defined $logfile )
 {

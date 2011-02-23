@@ -64,12 +64,8 @@ sub can_process
 
 	# Scopus doesn't contain data for the following types
 	my $type = $eprint->get_value( "type" );
-	return 0 if $type eq "creative_work";
 	return 0 if $type eq "thesis";
-	return 0 if $type eq "qut_thesis";
-	return 0 if $type eq "working_paper";
 	return 0 if $type eq "other";
-	return 0 if $type eq "report";
 
 	# otherwise, we can (try to) retrieve data if this eprint has a title and authors
 	return $eprint->is_set( "title" ) && $eprint->is_set( "creators_name" );
