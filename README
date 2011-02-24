@@ -30,7 +30,7 @@ Installation
 1. Copy all of the files in the 'eprints' sub-directory into the root directory
    of your EPrints installation, e.g. 'cp -R eprints/* /opt/eprints3'
 
-2. Copy all of the file in the 'archives' sub-directory into the configuration
+2. Copy all of the files in the 'archives' sub-directory into the configuration
    folder of the archive into which you want to import citation data, e.g.
    'cp -R archives/* /opt/eprints3/archives/foobar'
 
@@ -38,9 +38,12 @@ Installation
    (a) Move the contents of eprint_fields.pl.inc into your eprints_fields.pl
    (b) Move the contents of datasets.pl.inc into your datasets.pl
    (c) Insert your Scopus developer key into scapi.pl
-   (d) Check the options in scapi.pl, wos.pl and gscholar.pl.
+   (d) Check the options in scapi.pl, wos.pl and gscholar.pl
+   (e) If you want to view and manipulate citation objects via the "Manage
+       Records" interface, add the lines "+citation/view" and
+       "+citation/destroy" the appropriate user roles in user_roles.pl
 
-4. Update the database structure of your archive to contain the new dataset
+4. Update the database structure of your archive to include the new dataset
    and fields, e.g. 'epadmin update_database_structure foobar'
 
 You may also want to look through the import plug-ins themselves and ensure
