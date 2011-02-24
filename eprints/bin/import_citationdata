@@ -122,7 +122,7 @@ use Pod::Usage;
 use strict;
 
 use EPrints;
-use QUT::EPrints::LogHandler;
+use EPrints::LogHandler;
 
 
 #
@@ -213,7 +213,7 @@ if( !defined $ds )
 #
 my $pluginmap = $session->config( "datasets", "citation", "pluginmap" );
 my $plugin = undef;
-my $handler = new QUT::EPrints::LogHandler(
+my $handler = new EPrints::LogHandler(
 	session => $session,
 	logfile => $logfile,
 	prefix => "$repoid $datasetid",

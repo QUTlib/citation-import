@@ -15,7 +15,6 @@
 			{ 'sub_name' => 'datestamp', 'type' => 'time', 'render_style' => 'short', },
 		],
 		'sql_index' => 0,
-		'show_in_html' => 0
 	},
 
 	{

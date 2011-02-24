@@ -1,4 +1,4 @@
-package EPrints::Plugin::Import::Scopus;
+package EPrints::Plugin::Import::CitationService::Scopus;
 ###############################################################################
 #
 # Scopus Search API citation ingest.
@@ -82,7 +82,7 @@ sub can_process
 	}
 
 	# we can retrieve data if this eprint has a (usable) DOI
-	return 1 if ( $eprint->is_set( "identifier" ) && is_usable_doi( $eprint->get_value( "identifier" ) ) );
+	return 1 if ( $eprint->is_set( "id_number" ) && is_usable_doi( $eprint->get_value( "id_number" ) ) );
 
 	# Scopus doesn't contain data for the following types
 	my $type = $eprint->get_value( "type" );
@@ -108,10 +108,10 @@ sub get_response
 		# search using Scopus' identifier
 		$search = "eid(" . $eprint->get_value( "scopus_cluster" ) . ")";
 	}
-	elsif ( $eprint->is_set( "identifier" ) && is_usable_doi( $eprint->get_value( "identifier" ) ) )
+	elsif ( $eprint->is_set( "id_number" ) && is_usable_doi( $eprint->get_value( "id_number" ) ) )
 	{
 		# search using DOI
-		$search = "doi(" . $eprint->get_value( "identifier" ) . ")";
+		$search = "doi(" . $eprint->get_value( "id_number" ) . ")";
 	}
 	else
 	{

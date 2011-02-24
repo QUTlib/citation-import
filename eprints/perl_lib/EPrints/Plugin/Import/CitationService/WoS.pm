@@ -1,4 +1,4 @@
-package EPrints::Plugin::Import::WoS;
+package EPrints::Plugin::Import::CitationService::WoS;
 ###############################################################################
 #
 # Web of Science citation ingest.

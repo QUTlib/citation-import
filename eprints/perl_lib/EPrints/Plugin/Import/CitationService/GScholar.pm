@@ -1,4 +1,4 @@
-package EPrints::Plugin::Import::GScholar;
+package EPrints::Plugin::Import::CitationService::GScholar;
 ###############################################################################
 #
 # Google Scholar citation ingest.

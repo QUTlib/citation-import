@@ -7,6 +7,8 @@
 # version of eprint_fields.pl
 #
 
+use EPrints::DataObj::CitationDatum;
+
 # base dataset for all citation data
 $c->{datasets}->{citation} = {
 	class => "EPrints::DataObj::CitationDatum",
