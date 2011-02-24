@@ -18,7 +18,28 @@ package EPrints::Plugin::Import::CitationService;
 # individual functions for documentation.
 #
 ###############################################################################
-
+#
+# Copyright 2011 Queensland University of Technology. All Rights Reserved.
+# 
+#  This file is part of the Citation Count Import Plug-ins for GNU EPrints 3.
+#  
+#  Copyright (c) 2011 Queensland University of Technology, Queensland, Australia
+#  
+#  The plug-ins are free software; you can redistribute them and/or modify
+#  them under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#  
+#  The plug-ins are distributed in the hope that they will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#  
+#  You should have received a copy of the GNU General Public License
+#  along with EPrints 3; if not, write to the Free Software
+#  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+#
+######################################################################
 
 use strict;
 
