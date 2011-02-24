@@ -21,7 +21,8 @@ package EPrints::Plugin::Import::CitationService;
 #
 # Copyright 2011 Queensland University of Technology. All Rights Reserved.
 # 
-#  This file is part of the Citation Count Import Plug-ins for GNU EPrints 3.
+#  This file is part of the Citation Count Dataset and Import Plug-ins for GNU
+#  EPrints 3.
 #  
 #  Copyright (c) 2011 Queensland University of Technology, Queensland, Australia
 #  
