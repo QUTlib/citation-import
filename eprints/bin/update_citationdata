@@ -133,12 +133,12 @@ Do not update any citation data, but test that the algorithm selects each eprint
 exactly once per month. If invoked with --test, the command will ignore the
 I<source>, I<date> and I<hour> arguments.
 
+=back
+
 =head1 KNOWN BUGS
 
 Invoking 'update_citationdata --test --period hour' in the last hour of a month
 may fail because the test does not account for eprints added in this hour.
-
-=back
 
 =cut
 
@@ -333,15 +333,22 @@ if ( $period eq "day" )
 	if ( $noise > 0 )
 	{
 		print { $logfh } "Running update for " . Date::Calc::Date_to_Text( $update_year, $update_month, $update_day ) . " UTC.\n";
-		print { $logfh } "Scheduled EPrints: " . $ids[0] . " to " . $ids[$cutoff] . "\n";
-		if ( scalar @ids > $cutoff + 1 )
+		if ( scalar @ids > 0 )
 		{
-			print { $logfh } "New EPrints:";
-			for ( my $i = $cutoff + 1; $i < scalar @ids; $i++ )
+			print { $logfh } "Scheduled EPrints: " . $ids[0] . " to " . $ids[$cutoff] . "\n";
+			if ( scalar @ids > $cutoff + 1 )
 			{
-				print { $logfh } " ". $ids[$i];
+				print { $logfh } "New EPrints:";
+				for ( my $i = $cutoff + 1; $i < scalar @ids; $i++ )
+				{
+					print { $logfh } " ". $ids[$i];
+				}
+				print { $logfh } "\n";
 			}
-			print { $logfh } "\n";
+		}
+		else
+		{
+			print { $logfh } "No EPrints scheduled.\n";
 		}
 	}
 }
@@ -364,15 +371,22 @@ elsif ( $period eq "hour" )
 	if ( $noise > 0 )
 	{
 		print { $logfh } "Running update for " . Date::Calc::Date_to_Text( $update_year, $update_month, $update_day ) . " $update_hour:00:00 UTC.\n";
-		print { $logfh } "Scheduled EPrints: " . $ids[0] . " to " . $ids[$cutoff] . "\n";
-		if ( scalar @ids > $cutoff + 1 )
+		if ( scalar @ids > 0 )
 		{
-			print { $logfh } "New EPrints:";
-			for (my $i = $cutoff + 1; $i < scalar @ids; $i++ )
+			print { $logfh } "Scheduled EPrints: " . $ids[0] . " to " . $ids[$cutoff] . "\n";
+			if ( scalar @ids > $cutoff + 1 )
 			{
-				print { $logfh } " " . $ids[$i];
+				print { $logfh } "New EPrints:";
+				for (my $i = $cutoff + 1; $i < scalar @ids; $i++ )
+				{
+					print { $logfh } " " . $ids[$i];
+				}
+				print { $logfh} "\n";
 			}
-			print { $logfh} "\n";
+		}
+		else
+		{
+			print { $logfh } "No EPrints scheduled.\n";
 		}
 	}
 }
@@ -384,8 +398,25 @@ elsif ( $period eq "all" )
 	# output the eprint IDs to the log
 	if ( $noise > 0 )
 	{
-		print { $logfh } "Updating all EPrints (" . $ids[0] . " to " . $ids[(scalar @ids) - 1] . ").\n";
+		if ( scalar @ids > 0 )
+		{
+			print { $logfh } "Updating all EPrints (" . $ids[0] . " to " . $ids[(scalar @ids) - 1] . ").\n";
+		}
+		else
+		{
+			print { $logfh } "There are no EPrints in the live archive.\n";
+		}
 	}
+}
+
+# clean up our stuff before handing over to import_citationdata
+$session->terminate;
+close( $logfh );
+
+# stop now if there are no eprints to be updated
+if ( scalar @ids == 0 )
+{
+	exit 0;
 }
 
 
@@ -397,10 +428,6 @@ foreach my $id ( @ids )
 {
 	print $tmp "$id\n";
 }
-
-# clean up our stuff before handing over to import_citationdata
-$session->terminate;
-close( $logfh );
 
 
 #
