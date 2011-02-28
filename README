@@ -6,7 +6,9 @@ citation counts from Scopus, Web of Science and Google Scholar.
 
 Your institution requires a subscription to Scopus and Web of Science in order
 to use the plug-ins for their services. Google Scholar is freely accessible,
-but places restrictions on the use of robots to extract data from its web site.
+but requests that robots do not extract data from its web site (so you should
+only use the plug-in to conduct searches triggered manually). See the web sites
+listed below for the details for each service.
 
 Scopus:
   The Scopus plug-in uses the Scopus XML Search API. In addition to a
@@ -17,11 +19,12 @@ Web of Science:
   The Web of Science plug-in uses Web of Science Web Services Lite. In addition
   to possessing a subscription to Web of Science, your institution must sign up
   for access to the web services at
-  http://isiwebofknowledge.com/products_tools/products/related/webservices
+  http://isiwebofknowledge.com/products_tools/products/related/webservices.
 
 Google Scholar:
   The Google Scholar plug-in is a screen-scraper based on the Export::GScholar
-  plug-in shipped with EPrints 3.
+  plug-in shipped with EPrints 3. See
+  http://scholar.google.com/intl/en/scholar/about,html.
 
 
 Installation
