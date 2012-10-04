@@ -28,13 +28,13 @@ package EPrints::Plugin::Import::CitationService::WoS;
 #  You should have received a copy of the GNU General Public License
 #  along with EPrints 3; if not, write to the Free Software
 #  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-#
-######################################################################
+#######################################################################
 
 use strict;
 
 use Data::Dumper;
 use HTTP::Cookies;
+use Text::Unidecode;
 
 use EPrints::Plugin::Import::CitationService;
 our @ISA = ( "EPrints::Plugin::Import::CitationService" );
@@ -256,6 +256,7 @@ sub get_search_for_eprint
 		$py = substr( $eprint->get_value( "date" ), 0, 4 );
 		$q = $q . " AND PY=$py";
 	}
+	$q = unidecode($q); # Reduce any unicode characters to plain old ASCII. Strips diacritics, splits digraphs, etc.
 
 	# the record could appear either the year before, the year, or the year after it was published
 	my $date_begin = "1900-01-01";

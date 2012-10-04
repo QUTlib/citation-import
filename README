@@ -28,11 +28,19 @@ Google Scholar:
   use are at http://www.google.com/accounts/TOS.
 
 
-Installation
+Dependencies
 ------------
 
-Before using the import plug-ins, you need to install SOAP::Lite (for Web of
-Science) and WWW::Mechanize::Sleepy (for Google Scholar) from CPAN.
+This was developed for EPrints 3.2. It has not been tested on 3.3
+however it is being used with 3.3 elsewhere.
+
+Perl modules:
+SOAP::Lite (for Web of Science)
+WWW::Mechanize::Sleepy (for Google Scholar)
+
+
+Installation
+------------
 
 1. Copy all of the files in the 'eprints' sub-directory into the root directory
    of your EPrints installation, e.g. 'cp -R eprints/* /opt/eprints3'
@@ -76,6 +84,14 @@ counts for any given eprint are cached in the 'scopus', 'wos' and 'gscholar'
 fields of that eprint. E.g. to display Scopus' citation count on an eprint's
 summary page, put <epc:print expr="scopus_impact"/> in the appropriate place
 of your summary_page.xml.
+
+Known issues
+------------
+
+EPrints 3.3:
+- The LogHandler no longer conforms to the same interface as
+EPrints::CLIProcessor, causing the import scripts to fail. See
+solutions on the EPrints tech list.
 
 
 Contributors

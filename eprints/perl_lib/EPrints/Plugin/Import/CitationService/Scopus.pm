@@ -120,6 +120,7 @@ sub get_response
 		my $title = $eprint->get_value( "title" );
 		utf8::decode($title);
 		$title =~ s/[^\p{Latin}\p{Number}]+/ /g;
+		$title = Unicode::Normalize::normalize('KC', $title);
 		my $authlastname = @{$eprint->get_value( "creators_name" )}[0]->{family};
 		utf8::decode($authlastname);
 		$authlastname =~ s/\x{2019}/'/;
@@ -130,6 +131,7 @@ sub get_response
 			my $pubyear = substr( $eprint->get_value( "date" ), 0, 4 );
 			$search = $search . " and pubyear is $pubyear";
 		}
+		utf8::encode($search);
 	}
 
 	# build the URL from which we can download the data
@@ -230,7 +232,7 @@ sub response_to_epdata
 			my ( $detail ) = $status->getChildrenByTagName( "detail" );
 			if ( defined ( $detail ) )
 			{
-				$plugin->warning( "EPrint ID " . $eprint->get_id . ": " . $detail->textContent );
+				$plugin->warning( "EPrint ID " . $eprint->get_id . ": [" . $status_code . "] " . $detail->textContent );
 			}
 			$epdata = {};
 		}
