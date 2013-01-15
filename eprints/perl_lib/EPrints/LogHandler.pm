@@ -154,4 +154,20 @@ sub object
 	}
 }
 
+=item $dataobj = $processor->epdata_to_dataobj( $epdata, %opts )
+
+Requests the handler create the new object from $epdata.
+
+=cut
+
+sub epdata_to_dataobj
+{
+        my( $self, $epdata, %opts ) = @_;
+
+        return $self->{epdata_to_dataobj}( $epdata, %opts ) if defined $self->{epdata_to_dataobj};
+
+        return $opts{dataset}->create_dataobj( $epdata );
+}
+
+
 1;
