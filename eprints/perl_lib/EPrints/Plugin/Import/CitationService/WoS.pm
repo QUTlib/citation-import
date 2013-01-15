@@ -28,7 +28,18 @@ package EPrints::Plugin::Import::CitationService::WoS;
 #  You should have received a copy of the GNU General Public License
 #  along with EPrints 3; if not, write to the Free Software
 #  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-#######################################################################
+#
+######################################################################
+#
+# December 2012 / sf2:
+#
+# - Added support for v3 of the WoK API
+# - Added support for Lite or Premium accounts
+# - Possibility to locally (re-)define the Editions to search
+# - Added support for the maximum number of requests per second (2) and per session (10,000)
+#
+######################################################################
+
 
 use strict;
 
@@ -36,14 +47,26 @@ use Data::Dumper;
 use HTTP::Cookies;
 use Text::Unidecode;
 
+# un-comment if you need to debug the SOAP messages:
+# use SOAP::Lite +'trace';
+
 use EPrints::Plugin::Import::CitationService;
 our @ISA = ( "EPrints::Plugin::Import::CitationService" );
 
-# service endpoints and namespaces
-our $AUTHENTICATE_ENDPOINT = "http://search.isiknowledge.com/esti/wokmws/ws/WOKMWSAuthenticate";
-our $AUTHENTICATE_NS = "http://auth.cxf.wokmws.thomsonreuters.com";
-our $WOKSEARCH_ENDPOINT = "http://search.isiknowledge.com/esti/wokmws/ws/WokSearchLite";
-our $WOKSEARCH_NS = "http://woksearchlite.cxf.wokmws.thomsonreuters.com";
+# service endpoints and namespaces - these can be locally defined (e.g. if you have a Premium account)
+our $WOK_CONF = {
+	'AUTHENTICATE_ENDPOINT' => 'http://search.webofknowledge.com/esti/wokmws/ws/WOKMWSAuthenticate',
+	'AUTHENTICATE_NS' => 'http://auth.cxf.wokmws.thomsonreuters.com',
+	'WOKSEARCH_ENDPOINT' => 'http://search.webofknowledge.com/esti/wokmws/ws/WokSearchLite',
+	'WOKSEARCH_NS' => 'http://woksearch.cxf.wokmws.thomsonreuters.com',
+	'SERVICE_TYPE' => 'woksearchlite',
+};
+
+# the database editions to search. These can be locally defined, see "sub new()".
+our $EDITIONS = [qw/ SCI SSCI AHCI IC CCR ISTP ISSHP /];
+
+# the SOAP structures - will be built at run-time
+our $SOAP_EDITIONS = [];
 
 #
 # Create a new plug-in object.
@@ -65,85 +88,48 @@ sub new
 		return $self;
 	}
 
+	if( defined $self->{session} )
+	{
+		foreach my $confid ( keys %$WOK_CONF )
+		{
+			if( defined $self->{session}->config( 'wos', $confid ) )
+			{
+				# locally defined?
+				$WOK_CONF->{$confid} = $self->{session}->config( 'wos', $confid );
+			}
+		}
+
+		# Editions
+		my $local_editions = $self->{session}->config( 'wos', 'editions' );
+		if( EPrints::Utils::is_set( $local_editions ) )
+		{
+			$EDITIONS = EPrints::Utils::clone( $local_editions );
+		}
+
+		$self->{max_requests} = $self->{session}->config( 'wos', 'max_requests_per_session' );
+	}
+
+	$self->{max_requests} ||= 10_000;
+
 	# this hash will hold the query parameters that are the same for every request
 	$self->{query} = {};
 
 	# the databaseID or databaseId is always "WOS" (case is important in SOAP)
-	$self->{query}->{databaseID} = SOAP::Data->name( "databaseID" => "WOS" );
 	$self->{query}->{databaseId} = SOAP::Data->name( "databaseId" => "WOS" );
 
-	# the database editions to search -- "search" version
-	$self->{query}->{editions} = {};
-	$self->{query}->{editions}->{SCI} = SOAP::Data->name( "editions" => \SOAP::Data->value(
-		SOAP::Data->name( "collection" => "WOS" ),
-		SOAP::Data->name( "edition" => "SCI" ),
-	) );
-	$self->{query}->{editions}->{SSCI} = SOAP::Data->name( "editions" => \SOAP::Data->value(
-		SOAP::Data->name( "collection" => "WOS" ),
-		SOAP::Data->name( "edition" => "SSCI" ),
-	) );
-	$self->{query}->{editions}->{AHCI} = SOAP::Data->name( "editions" => \SOAP::Data->value(
-		SOAP::Data->name( "collection" => "WOS" ),
-		SOAP::Data->name( "edition" => "AHCI" ),
-	) );
-	$self->{query}->{editions}->{IC} = SOAP::Data->name( "editions" => \SOAP::Data->value(
-		SOAP::Data->name( "collection" => "WOS" ),
-		SOAP::Data->name( "edition" => "IC" ),
-	) );
-	$self->{query}->{editions}->{IC} = SOAP::Data->name( "editions" => \SOAP::Data->value(
-		SOAP::Data->name( "collection" => "WOS" ),
-		SOAP::Data->name( "edition" => "IC" ),
-	) );
-	$self->{query}->{editions}->{CCR} = SOAP::Data->name( "editions" => \SOAP::Data->value(
-		SOAP::Data->name( "collection" => "WOS" ),
-		SOAP::Data->name( "edition" => "CCR" ),
-	) );
-	$self->{query}->{editions}->{ISTP} = SOAP::Data->name( "editions" => \SOAP::Data->value(
-		SOAP::Data->name( "collection" => "WOS" ),
-		SOAP::Data->name( "edition" => "ISTP" ),
-	) );
-	$self->{query}->{editions}->{ISSHP} = SOAP::Data->name( "editions" => \SOAP::Data->value(
-		SOAP::Data->name( "collection" => "WOS" ),
-		SOAP::Data->name( "edition" => "ISSHP" ),
-	) );
-
-	# the databases editions to search -- "citingArticles" version
-	$self->{query}->{editionDesc} = {};
-	$self->{query}->{editionDesc}->{SCI} = SOAP::Data->name( "editionDesc" => \SOAP::Data->value(
-		SOAP::Data->name( "collection" => "WOS" ),
-		SOAP::Data->name( "edition" => "SCI" ),
-	) );
-	$self->{query}->{editionDesc}->{SSCI} = SOAP::Data->name( "editionDesc" => \SOAP::Data->value(
-		SOAP::Data->name( "collection" => "WOS" ),
-		SOAP::Data->name( "edition" => "SSCI" ),
-	) );
-	$self->{query}->{editionDesc}->{AHCI} = SOAP::Data->name( "editionDesc" => \SOAP::Data->value(
-		SOAP::Data->name( "collection" => "WOS" ),
-		SOAP::Data->name( "edition" => "AHCI" ),
-	) );
-	$self->{query}->{editionDesc}->{IC} = SOAP::Data->name( "editionDesc" => \SOAP::Data->value(
-		SOAP::Data->name( "collection" => "WOS" ),
-		SOAP::Data->name( "edition" => "IC" ),
-	) );
-	$self->{query}->{editionDesc}->{IC} = SOAP::Data->name( "editionDesc" => \SOAP::Data->value(
-		SOAP::Data->name( "collection" => "WOS" ),
-		SOAP::Data->name( "edition" => "IC" ),
-	) );
-	$self->{query}->{editionDesc}->{CCR} = SOAP::Data->name( "editionDesc" => \SOAP::Data->value(
-		SOAP::Data->name( "collection" => "WOS" ),
-		SOAP::Data->name( "edition" => "CCR" ),
-	) );
-	$self->{query}->{editionDesc}->{ISTP} = SOAP::Data->name( "editionDesc" => \SOAP::Data->value(
-		SOAP::Data->name( "collection" => "WOS" ),
-		SOAP::Data->name( "edition" => "ISTP" ),
-	) );
-	$self->{query}->{editionDesc}->{ISSHP} = SOAP::Data->name( "editionDesc" => \SOAP::Data->value(
-		SOAP::Data->name( "collection" => "WOS" ),
-		SOAP::Data->name( "edition" => "ISSHP" ),
-	) );
+	foreach my $edition ( @$EDITIONS )
+	{
+		push @$SOAP_EDITIONS, SOAP::Data->name( "editions" => \SOAP::Data->value(
+			SOAP::Data->name( "collection" => "WOS" ),
+			SOAP::Data->name( "edition" => "$edition" ),
+ 	       ) );
+	}
 
 	# the query language is always English
 	$self->{query}->{queryLanguage} = SOAP::Data->name( "queryLanguage" => "en" );
+
+	# sf2 - counting the number of requests made - see "sub call()" at the end of this file
+	$self->{requests} = 0;
 
 	return $self;
 }
@@ -194,7 +180,7 @@ sub get_response
 
 	# build a SOAP object for this session
 	my $soap = SOAP::Lite->new(
-		proxy => $WOKSEARCH_ENDPOINT,
+		proxy => $WOK_CONF->{WOKSEARCH_ENDPOINT},
 		autotype => 0,
 	);
 	$soap->transport->http_request->header( "Cookie" => "SID=\"" . $plugin->{session_id} . "\";" );
@@ -273,32 +259,32 @@ sub get_search_for_eprint
 
 	# search WoS for the eprint
 	my $query_params = SOAP::Data->value(
-		$plugin->{query}->{databaseID},
-		$plugin->{query}->{editions}->{SCI},
-		$plugin->{query}->{editions}->{SSCI},
-		$plugin->{query}->{editions}->{AHCI},
-		$plugin->{query}->{editions}->{IC},
-		$plugin->{query}->{editions}->{CCR},
-		$plugin->{query}->{editions}->{ISTP},
-		$plugin->{query}->{editions}->{ISSHP},
-		$plugin->{query}->{queryLanguage},
-		$date_param,
+		$plugin->{query}->{databaseId},
 		SOAP::Data->name( "userQuery" => $q ),
+		@$SOAP_EDITIONS,
+		$date_param,
+		$plugin->{query}->{queryLanguage},
 	);
+
+	# sf2 / TODO: v3 has a new format for fields (viewFields, sortFields)
 	my $retrieve_params = SOAP::Data->value(
-		SOAP::Data->name( "count" => "10" ),
-		SOAP::Data->name( "fields" => \SOAP::Data->value(
-			SOAP::Data->name( "name" )->value( "Date" ),
-			SOAP::Data->name( "sort" )->value( "D" )
-		) ),
 		SOAP::Data->name( "firstRecord" => "1" ),
+		SOAP::Data->name( "count" => "10" ),
+#		SOAP::Data->name( "fields" => \SOAP::Data->value(
+#			SOAP::Data->name( "name" )->value( "Date" ),
+#			SOAP::Data->name( "sort" )->value( "D" )
+#		) ),
 	);
 	my $som;
 	eval {
-		$som = $soap->call( "search",
-			SOAP::Data->name( "queryParameters" => \$query_params ),
-			SOAP::Data->name( "retrieveParameters" => \$retrieve_params )
-		);
+		my @params;
+		push @params, SOAP::Data->name( "queryParameters" => \$query_params );
+		push @params, SOAP::Data->name( "retrieveParameters" => \$retrieve_params );
+
+		my $service = $WOK_CONF->{SERVICE_TYPE};
+
+		# $som = $soap->call( SOAP::Data->name( "$service:search" )->attr( { "xmlns:$service" => "http://$service.v3.wokmws.thomsonreuters.com" } ) => @params );
+		$som = $plugin->call( $soap, SOAP::Data->name( "$service:search" )->attr( { "xmlns:$service" => "http://$service.v3.wokmws.thomsonreuters.com" } ) => @params );
 		1;
 	}
 	or do
@@ -343,26 +329,58 @@ sub get_identifier_from_search
 			return undef;
 		}
 
+		# the 'record' is string encapsulated in XML, so we need to parse it
+		# We're looking for: <UID>WOS:(\d+)</UID> (the tag used to be <UT> in previous API versions)
 		if ( $search->{recordsFound} == 1 )
 		{
 			# only one match; return that record
-			return ${search}->{records}->{UT};
-		}
 
-		# multiple matches; look for an exact title match
-		my @records = @{$search->{records}};
-		my $match = 0;
-		my $uctitle = uc( $eprint->get_value( "title" ) );
-		while ( $match < $search->{recordsFound} )
-		{
-			if ( uc( $records[$match] ) eq $uctitle )
+			my $doc;
+			eval {
+				$doc = $plugin->{session}->xml->parse_string( $search->{records} );
+			};
+			if( !defined $doc || $@ )
 			{
-				return $records[$match]->{UT};
+				$plugin->warning( 'Failed to parse Record XML' );
+				return "";
 			}
-			$match++;
+			else
+			{
+				my @tags = $doc->getElementsByTagName( 'UID' );
+				if( scalar( @tags ) )
+				{
+					return $tags[0]->textContent;
+				}
+			}
+			return "";
 		}
 
-		# no exact title match; return "not found"
+		my $doc;
+		eval {
+			$doc = $plugin->{session}->xml->parse_string( $search->{records} );
+		};
+		if( !defined $doc || $@ )
+		{
+			$plugin->warning( 'Failed to parse Record XML' );
+			return "";
+		}
+
+		my $uctitle = uc( $eprint->get_value( "title" ) );
+		my @records = $doc->getElementsByTagName( 'REC' );
+		RECORD: foreach my $record ( @records )
+		{
+			foreach my $title ( $record->getElementsByTagName( 'title' ) )
+			{
+				next unless( $title->getAttribute( 'type' ) eq 'item' );
+				if( uc( $title->textContent ) eq $uctitle )
+				{
+					my @tags = $record->getElementsByTagName( 'UID' );
+					next RECORD unless( scalar( @tags ) );
+					return $tags[0]->textContent;
+				}
+			}
+		}
+
 		return "";
 
 	}
@@ -403,31 +421,30 @@ sub get_cites_for_identifier
 
 	# configure what we want to retrieve
 	my $retrieve_params = SOAP::Data->value(
-		SOAP::Data->name( "count" => "1" ),
-		SOAP::Data->name( "fields" => \SOAP::Data->value(
-			SOAP::Data->name( "name" )->value( "Date" ),
-			SOAP::Data->name( "sort" )->value( "D" )
-		) ),
 		SOAP::Data->name( "firstRecord" => "1" ),
+		SOAP::Data->name( "count" => "1" ),
+#		SOAP::Data->name( "fields" => \SOAP::Data->value(
+#			SOAP::Data->name( "name" )->value( "Date" ),
+#			SOAP::Data->name( "sort" )->value( "D" )
+#		) ),
 	);
 
 	# search for citing articles
 	my $som;
 	eval {
-		$som = $soap->call( "citingArticles",
-			$plugin->{query}->{databaseId},
-			$plugin->{query}->{editionDesc}->{SCI},
-			$plugin->{query}->{editionDesc}->{SSCI},
-			$plugin->{query}->{editionDesc}->{AHCI},
-			$plugin->{query}->{editionDesc}->{IC},
-			$plugin->{query}->{editionDesc}->{CCR},
-			$plugin->{query}->{editionDesc}->{ISTP},
-			$plugin->{query}->{editionDesc}->{ISSHP},
-			$plugin->{query}->{queryLanguage},
-			$date_param,
-			SOAP::Data->name( "uid" => $ut ),
-			SOAP::Data->name( "retrieveParameters" => \$retrieve_params )
-		);
+		my @params;
+		push @params, $plugin->{query}->{databaseId};
+		push @params, SOAP::Data->name( "uid" => $ut );
+		push @params, $_ for( $SOAP_EDITIONS );
+		push @params, $date_param;
+		push @params, $plugin->{query}->{queryLanguage};
+		push @params, SOAP::Data->name( "retrieveParameters" => \$retrieve_params );
+		
+		my $service = $WOK_CONF->{SERVICE_TYPE};
+
+		#$som = $soap->call( SOAP::Data->name( "$service:citingArticles" )->attr( { "xmlns:$service" => "http://$service.v3.wokmws.thomsonreuters.com" } ) => @params );
+		$som = $plugin->call( $soap, SOAP::Data->name( "$service:citingArticles" )->attr( { "xmlns:$service" => "http://$service.v3.wokmws.thomsonreuters.com" } ) => @params );
+
 	}
 	or do
 	{
@@ -496,13 +513,16 @@ sub get_session
 	}
 
 	my $soap = SOAP::Lite->new(
-		proxy => $AUTHENTICATE_ENDPOINT,
-		default_ns => $AUTHENTICATE_NS,
+		proxy => $WOK_CONF->{AUTHENTICATE_ENDPOINT},
+		default_ns => $WOK_CONF->{AUTHENTICATE_NS},
 	);
 
 	my $som;
 	eval {
-		$som = $soap->call( "authenticate", undef );
+		# sf2 / using custom type as the WoS WS doesn't like the attributes added by SOAP::Lite. 
+		# this will call SOAP::Serializer::as_authenticate (see below)
+		$som = $soap->call( SOAP::Data->type( 'authenticate' => undef ) );
+
 		1;
 	}
 	or do
@@ -522,6 +542,12 @@ sub get_session
 }
 
 
+sub SOAP::Serializer::as_authenticate
+{
+	return [ 'authenticate', { 'xmlns' => $WOK_CONF->{AUTHENTICATE_NS} } ]; 
+}
+
+
 #
 # Terminate the session with Web of Science.
 #
@@ -533,15 +559,17 @@ sub dispose
 	{
 		# build a SOAP object
 		my $soap = SOAP::Lite->new(
-			proxy => $AUTHENTICATE_ENDPOINT,
-			default_ns => $AUTHENTICATE_NS
+			proxy => $WOK_CONF->{AUTHENTICATE_ENDPOINT},
+			default_ns => $WOK_CONF->{AUTHENTICATE_NS}
 		);
 		$soap->transport->http_request->header( "Cookie" => "SID=\"" . $plugin->{session_id} . "\";" );
 
 		# close the session
 		my $som;
 		eval {
-			$som = $soap->call( "closeSession", undef );
+			# sf2 / using custom type as the WoS WS doesn't like the attributes added by SOAP::Lite. 
+			# this will call SOAP::Serializer::as_closeSession (see below)
+			$som = $soap->call( SOAP::Data->type( 'closeSession' => undef ) );
 			1;
 		}
 		or do
@@ -553,6 +581,40 @@ sub dispose
 			$plugin->warning( "Unable to close Web of Science session: " . $som->faultstring );
 		}
 	}
+}
+
+sub SOAP::Serializer::as_closeSession
+{
+	return [ 'closeSession', { 'xmlns' => $WOK_CONF->{AUTHENTICATE_NS} } ]; 
+}
+
+
+# sf2 - having our own 'call' function allows us to count the number of requests which have been made to date. Thomson Reuters say there's a limit of 10,000 requests per session.
+sub call
+{
+	my( $plugin, $soap, @params ) = @_;
+
+	if( $plugin->{requests} >= $plugin->{max_requests} )
+	{
+		# we need a new session
+
+		# close the current session
+		$plugin->dispose;
+		delete $plugin->{session_id};
+
+		# get a new session ID - note this is eval'ed by the caller hence the use of die()
+		$plugin->get_session or die( 'Failed to get a new session ID' );
+		
+		$soap->transport->http_request->header( "Cookie" => "SID=\"" . $plugin->{session_id} . "\";" );
+		$plugin->{requests} = 0;
+	}
+
+	$plugin->{requests}++;
+
+	# max 2 requests per sec so sleep for 510ms.
+	select( undef, undef, undef, 0.51 );
+
+	return $soap->call( @params );
 }
 
 1;

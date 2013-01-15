@@ -41,7 +41,7 @@ B<import_citationdata> - Import citation data
 
 =head1 SYNOPSIS
 
-B<import_citationdata> I<repository_id> [B<options>] I<dataset> I<filename>
+B<import_citationdata> I<repository_id> [B<options>] I<dataset> [I<filename>]
 
 =head1 DESCRIPTION
 
@@ -63,7 +63,8 @@ or I<gscholar>
 =item I<filename>
 
 The name of a file containing one eprint ID per line, for which the command
-will attempt to gather citation data.
+will attempt to gather citation data. If omitted, this will process all the 
+eprints in the 'archive' dataset.
 
 =back
 
@@ -162,7 +163,7 @@ GetOptions(
 #
 pod2usage( 1 ) if $help;
 pod2usage( -exitstatus => 0, -verbose => 2 ) if $man;
-pod2usage( 2 ) if( scalar @ARGV != 3 );
+pod2usage( 2 ) if( scalar @ARGV < 2 || scalar @ARGV > 3 );
 
 
 #
@@ -266,10 +267,17 @@ if( $plugin->broken )
 # Go!
 #
 eval {
-$plugin->input_file(
+if( defined $filename )
+{
+	$plugin->input_file(
 		dataset=>$ds,
 		filename=>$filename,
 	);
+}
+else
+{
+	$plugin->process_eprint_dataset( dataset => $ds );
+}
 };
 if( $@ )
 {

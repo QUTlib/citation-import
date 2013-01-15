@@ -39,7 +39,7 @@ our @ISA = ( "EPrints::Plugin::Import::CitationService" );
 use LWP::UserAgent;
 use URI;
 
-our $SEARCHAPI = URI->new( "http://searchapi.scopus.com/search.url" );
+our $SEARCHAPI = URI->new( "http://searchapi.scopus.com/documentSearch.url" );
 
 
 #
@@ -120,7 +120,6 @@ sub get_response
 		my $title = $eprint->get_value( "title" );
 		utf8::decode($title);
 		$title =~ s/[^\p{Latin}\p{Number}]+/ /g;
-		$title = Unicode::Normalize::normalize('KC', $title);
 		my $authlastname = @{$eprint->get_value( "creators_name" )}[0]->{family};
 		utf8::decode($authlastname);
 		$authlastname =~ s/\x{2019}/'/;
@@ -131,20 +130,24 @@ sub get_response
 			my $pubyear = substr( $eprint->get_value( "date" ), 0, 4 );
 			$search = $search . " and pubyear is $pubyear";
 		}
-		utf8::encode($search);
 	}
 
 	# build the URL from which we can download the data
 	my $quri = $SEARCHAPI->clone;
 	$quri->query_form(
-		format => "XML",
-		devId => $plugin->{dev_id},
-		search => $search,
-		fields => "eid,citedbycount"
+		format => 'XML',
+		apiKey => $plugin->{dev_id},
+		search => $search
 	);
 
 	# send the query to Scopus
 	my $ua = LWP::UserAgent->new;
+
+	if( EPrints::Utils::is_set( $ENV{http_proxy} ) )
+	{
+		$ua->proxy( 'http', $ENV{http_proxy} );
+	}
+
 	my $response = $ua->get( $quri );
 
 	# Scopus has a maximum of 60 queries per minute, so sleep for a second
@@ -193,7 +196,6 @@ sub response_to_epdata
 		}
 	}
 
-
 	# get the citation count
 	my $epdata = undef;
 	if ( defined( $status_code ) )
@@ -201,18 +203,19 @@ sub response_to_epdata
 		if ( $status_code eq "OK" || $status_code eq "PartOK" )
 		{
 			# get the results of the search
-			my ( $result ) = $doc->firstChild->getChildrenByTagName( "scopusSearchResults" );
+			my ( $result ) = $doc->getElementsByTagName( "scopusSearchResults" );
 			if ( defined( $result ) )
 			{
-				my ( $results_count ) = $result->getChildrenByTagName( "returnedResults" );
+				my ( $results_count ) = $result->getElementsByTagName( "returnedResults" );
+
 				if ( defined( $results_count ) && $results_count->textContent > 0 )
 				{
 					# get the electronic id and the citation count
-					my ( $record ) = $result->getChildrenByTagName( "scopusResult" );
+					my ( $record ) = $result->getElementsByTagName( "scopusResult" );
 					if ( defined ( $record ) )
 					{
-						my $eid = shift @{$record->getChildrenByTagName( "eid" )};
-						my $citation_count = shift @{$record->getChildrenByTagName( "citedbycount" )};
+						my $eid = shift @{$record->getElementsByTagName( "eid" )};
+						my $citation_count = shift @{$record->getElementsByTagName( "citedbycount" )};
 						$epdata = {
 							cluster => $eid->textContent,
 							impact => $citation_count->textContent,
@@ -232,7 +235,7 @@ sub response_to_epdata
 			my ( $detail ) = $status->getChildrenByTagName( "detail" );
 			if ( defined ( $detail ) )
 			{
-				$plugin->warning( "EPrint ID " . $eprint->get_id . ": [" . $status_code . "] " . $detail->textContent );
+				$plugin->warning( "EPrint ID " . $eprint->get_id . ": " . $detail->textContent );
 			}
 			$epdata = {};
 		}

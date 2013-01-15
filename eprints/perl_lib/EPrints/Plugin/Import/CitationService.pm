@@ -74,15 +74,59 @@ sub input_text_fh
 {
 	my( $plugin, %opts ) = @_;
 
-	# this array will contain the list of datum ids
-	my @ids;
+	my @eprintids;
 
 	my $fh = $opts{fh};
-	LINE: while( my $line = <$fh> )
+	
+	while( my $line = <$fh> )
 	{
 		next if ( !( $line =~ /^(\d+)/ ) );
-		my $eprintid = $1;
+		push @eprintids, $1;
+	}
 
+	$opts{eprintids} = \@eprintids;
+	my $ids = $plugin->process_eprints( %opts ) || [];
+
+	# clean up
+	$plugin->dispose;
+
+	return EPrints::List->new( 
+		dataset => $opts{dataset}, 
+		session => $plugin->{session},
+		ids => $ids );
+}
+
+sub process_eprint_dataset
+{
+	my( $plugin, %opts ) = @_;
+
+	my $list = $plugin->{session}->dataset( 'archive' )->search();
+	my @eprintids = @{ $list->ids || [] };
+
+	$opts{eprintids} = \@eprintids;
+
+	my $ids = $plugin->process_eprints( %opts ) || [];
+	
+	# clean up
+	$plugin->dispose;
+
+	return EPrints::List->new( 
+		dataset => $opts{dataset}, 
+		session => $plugin->{session},
+		ids => $ids );
+
+}
+
+sub process_eprints
+{
+	my( $plugin, %opts ) = @_;
+
+	my $eprintids = $opts{eprintids};
+
+	my @ids;
+
+	LINE: foreach my $eprintid ( @{$eprintids||[]} )
+	{
 		my $eprint = $plugin->{session}->eprint( $eprintid );
 		if ( defined( $eprint ) )
 		{
@@ -90,6 +134,7 @@ sub input_text_fh
 
 			# get citation data for this eprint, trying up to $plugin->{parse_retry}->{max} times
 			my $parse_tries_left = $plugin->{parse_retry}->{max};
+
 			my $citedata = undef;
 			my $net_tries_left = $plugin->{net_retry}->{max};
 			while ( !defined( $citedata ) && $parse_tries_left > 0 )
@@ -149,7 +194,8 @@ sub input_text_fh
 			if ( !defined( $citedata ) )
 			{
 				$plugin->error( "Got " . $plugin->{parse_retry}->{max} . " malformed responses. Giving up." );
-				last LINE;
+				next LINE;
+
 			}
 
 		}
@@ -159,14 +205,9 @@ sub input_text_fh
 		}
 	}
 
-	# clean up
-	$plugin->dispose;
-
-	return EPrints::List->new( 
-		dataset => $opts{dataset}, 
-		session => $plugin->{session},
-		ids => \@ids );
+	return \@ids;
 }
+
 
 #
 # Check whether or not the plug-in can hope to retrieve citation data
