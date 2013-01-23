@@ -521,7 +521,7 @@ sub get_session
 	eval {
 		# sf2 / using custom type as the WoS WS doesn't like the attributes added by SOAP::Lite. 
 		# this will call SOAP::Serializer::as_authenticate (see below)
-		$som = $soap->call( SOAP::Data->type( 'authenticate' => undef ) );
+		$som = $soap->call( SOAP::Data->name( 'auth' )->prefix( 'auth' )->uri($WOK_CONF->{AUTHENTICATE_NS})->type( 'authenticate' => undef ) );
 
 		1;
 	}
@@ -569,7 +569,7 @@ sub dispose
 		eval {
 			# sf2 / using custom type as the WoS WS doesn't like the attributes added by SOAP::Lite. 
 			# this will call SOAP::Serializer::as_closeSession (see below)
-			$som = $soap->call( SOAP::Data->type( 'closeSession' => undef ) );
+			$som = $soap->call( SOAP::Data->name( 'closeSession' )->prefix( 'auth' )->uri($WOK_CONF->{AUTHENTICATE_NS})->type( 'closeSession' => undef ) );
 			1;
 		}
 		or do
