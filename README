@@ -26,19 +26,19 @@ only use the plug-in to conduct searches triggered manually). See the web sites
 listed below for the details for each service.
 
 Scopus:
-  The Scopus plug-in uses the Scopus XML Search API. In addition to a
-  subscription to Scopus, your institution requires a developer key for the
-  API. See http://searchapi.scopus.com.
+  The Scopus plug-in uses the Scopus Document Search API (the XML web service 
+  that underpins the JavaScript APIs). Your institution requires a developer 
+  key for the API. See https://www.developers.elsevier.com/cms/index.
 
 Web of Science:
-  The Web of Science plug-in uses Web of Science Web Services Lite. In addition
-  to possessing a subscription to Web of Science, your institution must sign up
-  for access to the web services at
-  http://isiwebofknowledge.com/products_tools/products/related/webservices.
+  The Web of Science plug-in uses Web of Science Web Services Premium or Lite. 
+  In addition to possessing a subscription to Web of Science, your institution 
+  must sign up for access to the web services at
+  http://wokinfo.com/products_tools/products/related/webservices/.
 
 Google Scholar:
   The Google Scholar plug-in is a screen-scraper based on the Export::GScholar
-  plug-in shipped with EPrints 3. See
+  plug-in shipped with EPrints 3.2. See
   http://scholar.google.com/intl/en/scholar/about,html. Google's full terms of
   use are at http://www.google.com/accounts/TOS.
 
