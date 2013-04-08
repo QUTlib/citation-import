@@ -435,7 +435,7 @@ sub get_cites_for_identifier
 		my @params;
 		push @params, $plugin->{query}->{databaseId};
 		push @params, SOAP::Data->name( "uid" => $ut );
-		push @params, $_ for( $SOAP_EDITIONS );
+		push @params, $_ for( @$SOAP_EDITIONS );
 		push @params, $date_param;
 		push @params, $plugin->{query}->{queryLanguage};
 		push @params, SOAP::Data->name( "retrieveParameters" => \$retrieve_params );
