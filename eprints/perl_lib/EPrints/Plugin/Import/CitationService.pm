@@ -11,7 +11,7 @@ package EPrints::Plugin::Import::CitationService;
 # This class implements the input_text_fh function, which parses the input
 # file, builds the list of eprints to be processed and inserts the data into
 # the dataset supplied by the caller. This function also re-tries failed
-# requests according to the "net_retry" and "parse_retry" parameters.
+# requests according to the "net_retry" parameter.
 #
 # Each sub-class of CitationService must implement can_process() and
 # get_epdata(). See the comments for the individual functions for
@@ -20,22 +20,22 @@ package EPrints::Plugin::Import::CitationService;
 ###############################################################################
 #
 # Copyright 2011 Queensland University of Technology. All Rights Reserved.
-#
+# 
 #  This file is part of the Citation Count Dataset and Import Plug-ins for GNU
 #  EPrints 3.
-#
+#  
 #  Copyright (c) 2011 Queensland University of Technology, Queensland, Australia
-#
+#  
 #  The plug-ins are free software; you can redistribute them and/or modify
 #  them under the terms of the GNU General Public License as published by
 #  the Free Software Foundation; either version 2 of the License, or
 #  (at your option) any later version.
-#
+#  
 #  The plug-ins are distributed in the hope that they will be useful,
 #  but WITHOUT ANY WARRANTY; without even the implied warranty of
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
-#
+#  
 #  You should have received a copy of the GNU General Public License
 #  along with EPrints 3; if not, write to the Free Software
 #  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
@@ -47,6 +47,9 @@ package EPrints::Plugin::Import::CitationService;
 # - Refactored process_eprints() to improve the abstract-concrete
 #   class interaction
 # - Revised exception handling
+# - Removed parse_retry functionality - individual eprints fail on a
+#   parse error or other error response from the web service (not
+#   transport errors) but processing of remaining eprints continues
 #
 ######################################################################
 
@@ -85,7 +88,7 @@ sub input_text_fh
 	my @eprintids;
 
 	my $fh = $opts{fh};
-
+	
 	while( my $line = <$fh> )
 	{
 		next if ( !( $line =~ /^(\d+)/ ) );
@@ -98,8 +101,8 @@ sub input_text_fh
 	# clean up
 	$plugin->dispose;
 
-	return EPrints::List->new(
-		dataset => $opts{dataset},
+	return EPrints::List->new( 
+		dataset => $opts{dataset}, 
 		session => $plugin->{session},
 		ids => $ids );
 }
@@ -118,12 +121,12 @@ sub process_eprint_dataset
 	$opts{eprintids} = \@eprintids;
 
 	my $ids = $plugin->process_eprints( %opts ) || [];
-
+	
 	# clean up
 	$plugin->dispose;
 
-	return EPrints::List->new(
-		dataset => $opts{dataset},
+	return EPrints::List->new( 
+		dataset => $opts{dataset}, 
 		session => $plugin->{session},
 		ids => $ids );
 
@@ -216,9 +219,9 @@ sub can_process
 # Returns an epdata hashref for a citation datum for $eprint or undef
 # if no matches were found in the citation service.
 #
-# Croaks if there are problems receiving or parsing responses from the
-# citation service, or if the citation service returns an error
-# response.
+# Dies if there are problems receiving responses from the citation
+# service, and returns undef if the citation service returns an error
+# response (to allow service requests for subsequent eprints).
 #
 sub get_epdata
 {

@@ -59,7 +59,7 @@ use HTTP::Cookies;
 use Text::Unidecode;
 
 # un-comment if you need to debug the SOAP messages:
-#use SOAP::Lite +'trace';
+# use SOAP::Lite +'trace';
 
 use EPrints::Plugin::Import::CitationService;
 our @ISA = ( "EPrints::Plugin::Import::CitationService" );
@@ -351,8 +351,7 @@ sub get_identifier_from_search
 {
 	my ( $plugin, $search, $eprint ) = @_;
 
-	# extract the identifier ("UT")
-
+	# sanity check
         return undef if ( $search->{recordsFound} == 0 );
 
         # only one match; return that record
@@ -395,10 +394,10 @@ sub get_identifier_from_search
 
 
 #
-# Search for articles that cite the eprint with a given identifier ($uid) on
-# Web of Science. Returns the result of the call (i.e. SOAP::SOM->result),
-# an empty hash if there was a SOAP fault, or undef if there was a network
-# error.
+# Search for articles that cite the eprint with a given identifier
+# ($uid) on Web of Science. Returns the result of the call
+# (i.e. SOAP::SOM->result), an empty hash if there was a SOAP fault,
+# or dies if there was a persistent network error.
 #
 # $soap should be a SOAP object that will call the $WOKSEARCH_ENDPOINT,
 # and contains the session identifier for the session in which this
