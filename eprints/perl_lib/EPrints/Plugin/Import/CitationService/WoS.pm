@@ -4,7 +4,7 @@ package EPrints::Plugin::Import::CitationService::WoS;
 # Web of Science citation ingest.
 #
 # This plug-in will retrieve citation data from Web of Science Web Services
-# Lite. This data should be stored in the "wos" dataset.
+# Premium. This data should be stored in the "wos" dataset.
 #
 ###############################################################################
 #
@@ -31,6 +31,17 @@ package EPrints::Plugin::Import::CitationService::WoS;
 #
 ######################################################################
 #
+# May 2013 / gregson:
+#
+# - Revised and improved exception handling
+# - Configured Web Services Premium by default
+# - Added DOI filtering to remove ones with mismatched parenthesis
+#   that WoS can't interpret
+# - Fixed a character escaping issue in the userQuery element
+# - Modified get_session() and dispose() to use $plugin->call()
+#
+######################################################################
+#
 # December 2012 / sf2:
 #
 # - Added support for v3 of the WoK API
@@ -48,7 +59,7 @@ use HTTP::Cookies;
 use Text::Unidecode;
 
 # un-comment if you need to debug the SOAP messages:
-# use SOAP::Lite +'trace';
+#use SOAP::Lite +'trace';
 
 use EPrints::Plugin::Import::CitationService;
 our @ISA = ( "EPrints::Plugin::Import::CitationService" );
@@ -57,9 +68,9 @@ our @ISA = ( "EPrints::Plugin::Import::CitationService" );
 our $WOK_CONF = {
 	'AUTHENTICATE_ENDPOINT' => 'http://search.webofknowledge.com/esti/wokmws/ws/WOKMWSAuthenticate',
 	'AUTHENTICATE_NS' => 'http://auth.cxf.wokmws.thomsonreuters.com',
-	'WOKSEARCH_ENDPOINT' => 'http://search.webofknowledge.com/esti/wokmws/ws/WokSearchLite',
+	'WOKSEARCH_ENDPOINT' => 'http://search.webofknowledge.com/esti/wokmws/ws/WokSearch',
 	'WOKSEARCH_NS' => 'http://woksearch.cxf.wokmws.thomsonreuters.com',
-	'SERVICE_TYPE' => 'woksearchlite',
+	'SERVICE_TYPE' => 'woksearch',
 };
 
 # the database editions to search. These can be locally defined, see "sub new()".
@@ -163,22 +174,16 @@ sub can_process
 
 
 #
-# Get the response from Web of Science for a given eprint.
+# Get the response from Web of Science for a given eprint or return an
+# empty hash.
 #
-sub get_response
+sub get_epdata
 {
 	my ( $plugin, $eprint ) = @_;
 
-	# ensure that we have a WoS session
-	if ( !defined( $plugin->{session_id} ) )
-	{
-		if ( !$plugin->get_session )
-		{
-			return undef;
-		}
-	}
+        $plugin->get_session();
 
-	# build a SOAP object for this session
+	# Build a SOAP object for this session
 	my $soap = SOAP::Lite->new(
 		proxy => $WOK_CONF->{WOKSEARCH_ENDPOINT},
 		autotype => 0,
@@ -186,40 +191,77 @@ sub get_response
 	$soap->transport->http_request->header( "Cookie" => "SID=\"" . $plugin->{session_id} . "\";" );
 
 	# get the WoS identifier ("UT") for this eprint
-	my $ut;
+	my $uid;
 	if ( $eprint->is_set( "wos_cluster" ) )
 	{
-		# we already know the identifier
-		$ut = $eprint->get_value( "wos_cluster" );
+		# We already know the identifier
+		$uid = $eprint->get_value( "wos_cluster" );
 	}
 	else
 	{
-		# search for the WoS record for this eprint
-		my $search = $plugin->get_search_for_eprint( $eprint, $soap );
-		return undef if !defined( $search );
-		return {} if ( scalar keys %{$search} == 0 );
-
-		# extract the identifier from the response
-		$ut = $plugin->get_identifier_from_search( $search, $eprint );
-		if ( !defined( $ut ) )
-		{
-			$plugin->warning( "Could not parse search results for EPrint ID " . $eprint->get_id );
-			return undef;
-		}
-
-		# return an empty response if the search didn't find any records
-		return {} if ( $ut eq "" );
+	    # Search WoS for the eprint and retrieve the UID, no UID
+	    # indicates the eprint is not indexed in WoS so return
+	    # undef
+	    $uid = $plugin->_retrieve_uid( $eprint, $soap );
+	    return undef if ( !defined $uid );
 	}
 
-	# search for the articles that cite this identifier, or return empty
-	return $plugin->get_cites_for_identifier( $eprint, $ut, $soap );
+	# Search for the articles that cite this identifier, or return
+	# an empty hash
+
+        my $cites = $plugin->get_cites_for_identifier( $eprint, $uid, $soap );
+
+	return $plugin->response_to_epdata( $cites );
+}
+
+#
+# Returns the UID of $eprint by querying WoS or undef.
+#
+# Queries WoS by DOI first, if the record has one, and if that fails
+# queries again using bibliographic metadata.
+#
+sub _retrieve_uid
+{
+    my ( $plugin, $eprint, $soap ) = @_;
+
+    my $uid = undef;
+    my $search = undef;
+
+    # Try to retrieve the UID using a DOI if it is set
+    if ( $eprint->is_set( 'id_number' )
+         && _is_usable_doi( $eprint->get_value( 'id_number' ) ) )
+    {
+	$search = $plugin->get_search_for_eprint( $eprint,
+                                                  $soap,
+                                                  $plugin->_get_querystring_doi( $eprint ) );
+	if ( defined $search )
+	{
+	    $uid = $plugin->get_identifier_from_search( $search, $eprint );
+	}
+
+    }
+    # Try to retrieve using bibligraphic metadata if we've had no
+    # success
+    if ( !defined $uid )
+    {
+	$search = $plugin->get_search_for_eprint( $eprint,
+                                                  $soap,
+                                                  $plugin->_get_querystring_metadata( $eprint ) );
+	if ( defined $search )
+	{
+	    $uid = $plugin->get_identifier_from_search( $search, $eprint );
+	}
+    }
+
+    return $uid;
 }
 
 
 #
-# Search for a particular eprint on Web of Science. Returns the result of
-# the call (i.e. SOAP::SOM->result), an empty hash if there was a SOAP
-# fault, or undef if there was a network error.
+# Search for a particular eprint on Web of Science using the query,
+# $q. Returns the result of the call (i.e. SOAP::SOM->result), an
+# empty hash if there was a SOAP fault, or undef if there was a
+# network error.
 #
 # $soap should be a SOAP object that will call the $WOKSEARCH_ENDPOINT,
 # and contains the session identifier for the session in which this
@@ -227,44 +269,38 @@ sub get_response
 #
 sub get_search_for_eprint
 {
-	my ( $plugin, $eprint, $soap ) = @_;
+	my ( $plugin, $eprint, $soap, $q ) = @_;
 
-	# build a query string that will (hopefully) locate the eprint in WoS
-	my $ti = $eprint->get_value( "title" );
-	$ti =~ s/[^\p{Latin}\p{Number}]+/ /g; # WoS doesn't like punctuation
-	my $creator = @{$eprint->get_value( "creators_name" )}[0];
-	my $au = $creator->{family} . ", " . substr( $creator->{given}, 0, 1 ) . "*";
-	$au =~ s/[-\'\x{2019}]/\*/g; # WoS is inconsistent with - and '
-	my $q = "AU=($au) AND TI=(\"$ti\")";
-	my $py;
-	if ( $eprint->is_set( "date" ) )
-	{
-		$py = substr( $eprint->get_value( "date" ), 0, 4 );
-		$q = $q . " AND PY=$py";
-	}
-	$q = unidecode($q); # Reduce any unicode characters to plain old ASCII. Strips diacritics, splits digraphs, etc.
-
-	# the record could appear either the year before, the year, or the year after it was published
 	my $date_begin = "1900-01-01";
 	my $date_end = substr( EPrints::Time::get_iso_timestamp(), 0, 10 );
 	if ( $eprint->is_set( "date" ) )
 	{
-		$date_begin = ( $py - 1 ) . "-01-01";
-		$date_end = ( $py + 1) . "-12-31";
+	    # Add a limit on timespan to reduce the risk of erroneous
+	    # results - the record could appear either the year
+	    # before, the year, or the year after it was published.
+	    my $date = substr( $eprint->get_value( "date" ), 0, 4 );
+	    $date_begin = ( $date - 1 ) . "-01-01";
+	    $date_end = ( $date + 1) . "-12-31";
 	}
 	my $date_param = SOAP::Data->name( "timeSpan" => \SOAP::Data->value(
-		SOAP::Data->name( "begin" )->value( $date_begin ),
-		SOAP::Data->name( "end" )->value( $date_end )
-	) );
+					    SOAP::Data->name( "begin" )->value( $date_begin ),
+					    SOAP::Data->name( "end" )->value( $date_end )
+					) );
 
-	# search WoS for the eprint
-	my $query_params = SOAP::Data->value(
-		$plugin->{query}->{databaseId},
-		SOAP::Data->name( "userQuery" => $q ),
-		@$SOAP_EDITIONS,
-		$date_param,
-		$plugin->{query}->{queryLanguage},
-	);
+	# Build SOAP call
+	my @query_params;
+	push @query_params, $plugin->{query}->{databaseId};
+
+        # Force the Data object to a string so special chars are
+        # encoded properly during serialisation and then add the xsd
+        # namespace declarataion to stop the server complaining
+	push @query_params, SOAP::Data->name( "userQuery" => $q )->type( 'string' )->attr( { "xmlns:xsd" => "http://www.w3.org/2001/XMLSchema" } );
+
+	push @query_params, @$SOAP_EDITIONS;
+	push @query_params, $date_param;
+	push @query_params, $plugin->{query}->{queryLanguage};
+	
+	my $q_params = SOAP::Data->value( @query_params );
 
 	# sf2 / TODO: v3 has a new format for fields (viewFields, sortFields)
 	my $retrieve_params = SOAP::Data->value(
@@ -275,27 +311,28 @@ sub get_search_for_eprint
 #			SOAP::Data->name( "sort" )->value( "D" )
 #		) ),
 	);
-	my $som;
-	eval {
-		my @params;
-		push @params, SOAP::Data->name( "queryParameters" => \$query_params );
-		push @params, SOAP::Data->name( "retrieveParameters" => \$retrieve_params );
 
-		my $service = $WOK_CONF->{SERVICE_TYPE};
+        my @params;
+        push @params, SOAP::Data->name( "queryParameters" => \$q_params );
+        push @params, SOAP::Data->name( "retrieveParameters" => \$retrieve_params );
 
-		# $som = $soap->call( SOAP::Data->name( "$service:search" )->attr( { "xmlns:$service" => "http://$service.v3.wokmws.thomsonreuters.com" } ) => @params );
-		$som = $plugin->call( $soap, SOAP::Data->name( "$service:search" )->attr( { "xmlns:$service" => "http://$service.v3.wokmws.thomsonreuters.com" } ) => @params );
-		1;
-	}
-	or do
+        my $service = $WOK_CONF->{SERVICE_TYPE};
+
+        my $som = $plugin->call( $soap, 0, SOAP::Data->name( "$service:search" )->attr( { "xmlns:$service" => "http://$service.v3.wokmws.thomsonreuters.com" } ) => @params );
+
+	if ( $som->fault() )
 	{
-		$plugin->warning( "Unable to connect to the search service for EPrints ID " . $eprint->get_id . ": " . $@ );
-		return undef;
-	};
-	if ( $som->fault )
-	{
-		$plugin->warning( "Unable to retrieve record for EPrint ID " . $eprint->get_id . " from Web of Science: " . $som->faultstring );
-		return {};
+            # Complain on receiving a SOAP error and then return undef
+            # to allow remaining eprints to be processed.  Errors are
+            # likely to be caused by data issues related to this
+            # specific eprint and shared with a minority of others so
+            # it's better to keep trying than to give up.
+
+            # MG To Do: it would be useful to log the serialized call
+            # here - logging the userQuery is a good start.
+            $plugin->error( "Unable to retrieve UID from Web of Science for EPrint ID " . $eprint->get_id .
+                            ": \n" . $plugin->_get_som_error( $som ) . ", userQuery = $q" );
+            return undef;
 	}
 
 	return $som->result;
@@ -314,86 +351,51 @@ sub get_identifier_from_search
 {
 	my ( $plugin, $search, $eprint ) = @_;
 
-	# sanity check
-	if ( !defined( $search->{recordsFound} ) )
-	{
-		return undef;
-	}
-
 	# extract the identifier ("UT")
-	if ( $search->{recordsFound} > 0 )
-	{
-		# sanity check
-		if ( !defined( $search->{records} ) )
-		{
-			return undef;
-		}
 
-		# the 'record' is string encapsulated in XML, so we need to parse it
-		# We're looking for: <UID>WOS:(\d+)</UID> (the tag used to be <UT> in previous API versions)
-		if ( $search->{recordsFound} == 1 )
-		{
-			# only one match; return that record
+        return undef if ( $search->{recordsFound} == 0 );
 
-			my $doc;
-			eval {
-				$doc = $plugin->{session}->xml->parse_string( $search->{records} );
-			};
-			if( !defined $doc || $@ )
-			{
-				$plugin->warning( 'Failed to parse Record XML' );
-				return "";
-			}
-			else
-			{
-				my @tags = $doc->getElementsByTagName( 'UID' );
-				if( scalar( @tags ) )
-				{
-					return $tags[0]->textContent;
-				}
-			}
-			return "";
-		}
+        # only one match; return that record
+        my $doc;
+        eval
+        {
+            $doc = $plugin->{session}->xml->parse_string( $search->{records} );
+            1;
+        } or do
+        {
+            $plugin->warning( "Unable to parse record XML: \n" . $@ . ": " . $search->{records} );
+            die( 'Unable to parse response for WoS search request' );
+        };
 
-		my $doc;
-		eval {
-			$doc = $plugin->{session}->xml->parse_string( $search->{records} );
-		};
-		if( !defined $doc || $@ )
-		{
-			$plugin->warning( 'Failed to parse Record XML' );
-			return "";
-		}
+        # the 'record' is string encapsulated in XML, so we need to parse it
+        # We're looking for: <UID>WOS:(\d+)</UID> (the tag used to be <UT> in previous API versions)
+        if ( $search->{recordsFound} == 1 )
+        {
+            return $doc->getElementsByTagName( 'UID' )->[0]->textContent;
+        }
 
-		my $uctitle = uc( $eprint->get_value( "title" ) );
-		my @records = $doc->getElementsByTagName( 'REC' );
-		RECORD: foreach my $record ( @records )
-		{
-			foreach my $title ( $record->getElementsByTagName( 'title' ) )
-			{
-				next unless( $title->getAttribute( 'type' ) eq 'item' );
-				if( uc( $title->textContent ) eq $uctitle )
-				{
-					my @tags = $record->getElementsByTagName( 'UID' );
-					next RECORD unless( scalar( @tags ) );
-					return $tags[0]->textContent;
-				}
-			}
-		}
+        my $uctitle = uc( $eprint->get_value( "title" ) );
+        my @records = $doc->getElementsByTagName( 'REC' );
+      RECORD: foreach my $record ( @records )
+        {
+            foreach my $title ( $record->getElementsByTagName( 'title' ) )
+            {
+                next unless( $title->getAttribute( 'type' ) eq 'item' );
+                if ( uc( $title->textContent ) eq $uctitle )
+                {
+                    my @tags = $record->getElementsByTagName( 'UID' );
+                    next RECORD unless( scalar( @tags ) );
+                    return $tags[0]->textContent;
+                }
+            }
+        }
 
-		return "";
-
-	}
-	else
-	{
-		# no records found; return an empty string
-		return "";
-	}
+        return;
 }
 
 
 #
-# Search for articles that cite the eprint with a given identifier ($ut) on
+# Search for articles that cite the eprint with a given identifier ($uid) on
 # Web of Science. Returns the result of the call (i.e. SOAP::SOM->result),
 # an empty hash if there was a SOAP fault, or undef if there was a network
 # error.
@@ -404,7 +406,7 @@ sub get_identifier_from_search
 #
 sub get_cites_for_identifier
 {
-	my ( $plugin, $eprint, $ut, $soap ) = @_;
+	my ( $plugin, $eprint, $uid, $soap ) = @_;
 
 	# work out the date range in which citations might appear
 	my $date_begin = "1970-01-01";
@@ -431,34 +433,29 @@ sub get_cites_for_identifier
 
 	# search for citing articles
 	my $som;
-	eval {
-		my @params;
-		push @params, $plugin->{query}->{databaseId};
-		push @params, SOAP::Data->name( "uid" => $ut );
-		push @params, @$SOAP_EDITIONS;
-		push @params, $date_param;
-		push @params, $plugin->{query}->{queryLanguage};
-		push @params, SOAP::Data->name( "retrieveParameters" => \$retrieve_params );
-		
-		my $service = $WOK_CONF->{SERVICE_TYPE};
 
-		#$som = $soap->call( SOAP::Data->name( "$service:citingArticles" )->attr( { "xmlns:$service" => "http://$service.v3.wokmws.thomsonreuters.com" } ) => @params );
-		$som = $plugin->call( $soap, SOAP::Data->name( "$service:citingArticles" )->attr( { "xmlns:$service" => "http://$service.v3.wokmws.thomsonreuters.com" } ) => @params );
+        my @params;
+        push @params, $plugin->{query}->{databaseId};
+        push @params, SOAP::Data->name( 'uid' => $uid );
+        push @params, @$SOAP_EDITIONS;
+        push @params, $date_param;
+        push @params, $plugin->{query}->{queryLanguage};
+        push @params, SOAP::Data->name( "retrieveParameters" => \$retrieve_params );
 
-	}
-	or do
+        my $service = $WOK_CONF->{SERVICE_TYPE};
+
+        $som = $plugin->call( $soap, 0, SOAP::Data->name( "$service:citingArticles" )->attr( { "xmlns:$service" => "http://$service.v3.wokmws.thomsonreuters.com" } ) => @params );
+
+	if ( $som->fault() )
 	{
-		$plugin->warning( "Unable to connect to the citingArticles service for EPrint ID " . $eprint->get_id . ": " . $@ );
-		return undef;
-	};
-	if ( $som->fault )
-	{
-		$plugin->warning( "Unable to retrieve citation data for EPrint ID " . $eprint->get_id . " from Web of Science: " . $som->faultstring );
-		return {};
+            # MG To do: it would be useful to log the serialized call
+            # here if the faultcode eq 'Client'
+	    die( "Unable to retrieve cites for EPrint ID " . $eprint->get_id .
+                 " from Web of Science: \n" . $plugin->_get_som_error( $som ) );
 	}
 
 	# we will need the identifier again later, so save it in the result
-	$som->result->{ut} = $ut;
+	$som->result->{ut} = $uid;
 
 	return $som->result;
 
@@ -474,26 +471,19 @@ sub get_cites_for_identifier
 #
 sub response_to_epdata
 {
-	my ( $plugin, $eprint, $response ) = @_;
-
-	# if the response is empty, it's because we couldn't find a record for this eprint
-	if ( scalar keys %{$response} == 0 )
-	{
-		$plugin->warning( "No match for EPrint ID " . $eprint->get_id . "." );
-		return {};
-	}
+	my ( $plugin, $response ) = @_;
 
 	# sanity check
 	if ( !defined( $response->{recordsFound} ) || !defined( $response->{ut} ) )
 	{
-		$plugin->warning( "Got an unusable response for EPrint ID " . $eprint->get_id . ": " . Data::Dumper( $response ) );
-		return undef;
+            $plugin->warning( "Got an unusable response: " . Data::Dumper( $response ) );
+            die( 'Unable to parse citingArticles response from WoS' );
 	}
 
 	return {
 		cluster => $response->{ut},
 		impact => $response->{recordsFound},
-	}
+            };
 }
 
 
@@ -517,23 +507,14 @@ sub get_session
 		default_ns => $WOK_CONF->{AUTHENTICATE_NS},
 	);
 
-	my $som;
-	eval {
-		# sf2 / using custom type as the WoS WS doesn't like the attributes added by SOAP::Lite. 
-		# this will call SOAP::Serializer::as_authenticate (see below)
-		$som = $soap->call( SOAP::Data->name( 'auth' )->prefix( 'auth' )->uri($WOK_CONF->{AUTHENTICATE_NS})->type( 'authenticate' => undef ) );
+        # sf2 / using custom type as the WoS WS doesn't like the
+        # attributes added by SOAP::Lite.  this will call
+        # SOAP::Serializer::as_authenticate (see below)
+	my $som = $plugin->call($soap, 1, SOAP::Data->name( 'auth' )->prefix( 'auth' )->uri($WOK_CONF->{AUTHENTICATE_NS})->type( 'authenticate' => undef ), 1 );
 
-		1;
-	}
-	or do
+	if ( $som->fault() )
 	{
-		$plugin->warning( "Unable to connect to Web of Science: " . $@ );
-		return undef;
-	};
-	if ( $som->fault )
-	{
-		$plugin->warning( "Unable to authenticate to Web of Science: " . $som->faultstring );
-		return undef;
+            die( "Unable to authenticate to WoS: \n" . $plugin->_get_som_error( $som ) );
 	}
 
 	$plugin->{session_id} = $som->result;
@@ -565,21 +546,16 @@ sub dispose
 		$soap->transport->http_request->header( "Cookie" => "SID=\"" . $plugin->{session_id} . "\";" );
 
 		# close the session
-		my $som;
-		eval {
-			# sf2 / using custom type as the WoS WS doesn't like the attributes added by SOAP::Lite. 
-			# this will call SOAP::Serializer::as_closeSession (see below)
-			$som = $soap->call( SOAP::Data->name( 'closeSession' )->prefix( 'auth' )->uri($WOK_CONF->{AUTHENTICATE_NS})->type( 'closeSession' => undef ) );
-			1;
-		}
-		or do
-		{
-			$plugin->warning( "Unable to close Web of Science session: " . $@ );
-		};
-		if ( $som->fault )
-		{
-			$plugin->warning( "Unable to close Web of Science session: " . $som->faultstring );
-		}
+
+                # sf2 / using custom type as the WoS WS doesn't like
+                # the attributes added by SOAP::Lite.  this will call
+                # SOAP::Serializer::as_closeSession (see below)
+		my $som = $soap->call( SOAP::Data->name( 'closeSession' )->prefix( 'auth' )->uri($WOK_CONF->{AUTHENTICATE_NS})->type( 'closeSession' => undef ) );
+
+                if ( $som->fault() )
+                {
+                    die( "Unable to close WoS session: \n" . $plugin->_get_som_error( $som ) );
+                }
 	}
 }
 
@@ -589,12 +565,22 @@ sub SOAP::Serializer::as_closeSession
 }
 
 
-# sf2 - having our own 'call' function allows us to count the number of requests which have been made to date. Thomson Reuters say there's a limit of 10,000 requests per session.
+# sf2 - having our own 'call' function allows us to count the number
+# of requests which have been made to date. Thomson Reuters say
+# there's a limit of 10,000 requests per session.
+#
+# If $ignore_session_limit is true it won't try to refresh the
+# session. Useful when the call to call() is for creating or disposing
+# the session.
+#
 sub call
 {
-	my( $plugin, $soap, @params ) = @_;
+	my( $plugin, $soap, $ignore_session_limit, @params ) = @_;
 
-	if( $plugin->{requests} >= $plugin->{max_requests} )
+        $ignore_session_limit = $ignore_session_limit || 0;
+
+	if ( !$ignore_session_limit
+            && $plugin->{requests} >= $plugin->{max_requests} )
 	{
 		# we need a new session
 
@@ -602,19 +588,151 @@ sub call
 		$plugin->dispose;
 		delete $plugin->{session_id};
 
-		# get a new session ID - note this is eval'ed by the caller hence the use of die()
-		$plugin->get_session or die( 'Failed to get a new session ID' );
-		
+		# get a new session ID
+		$plugin->get_session;
+
 		$soap->transport->http_request->header( "Cookie" => "SID=\"" . $plugin->{session_id} . "\";" );
 		$plugin->{requests} = 0;
 	}
 
-	$plugin->{requests}++;
+        # Make up to $plugin->{net_retry}->{max} attempts to make the
+        # SOAP call and die if unsuccessful.
+        my $som;
+        my $net_tries_left = $plugin->{net_retry}->{max};
+        while ( !defined $som && $net_tries_left )
+        {
+            # max 2 requests per sec so sleep for 510ms.
+            select( undef, undef, undef, 0.51 );
+            $plugin->{requests}++;
 
-	# max 2 requests per sec so sleep for 510ms.
-	select( undef, undef, undef, 0.51 );
+            eval
+            {
+                $som = $soap->call( @params );
+                1;
+            } or do
+            {
+                # Assume this is a transport error, go to sleep before
+                # trying again
+                $plugin->warning(
+				 "Problem connecting to the WoS server: \n" . $@ .
+                                 ".\nWaiting " . $plugin->{net_retry}->{interval} . " seconds before trying again."
+                             );
+                sleep( $plugin->{net_retry}->{interval} );
+                $som = undef;
+            };
+            $net_tries_left--;
+        }
 
-	return $soap->call( @params );
+        if ( !defined $som )
+        {
+            die( "No response in " . $plugin->{net_retry}->{max} . " attempts. Giving up." );
+        }
+
+	return $som;
+}
+
+# Return a WoS query string using the eprints' DOI
+sub _get_querystring_doi
+{
+    my ( $plugin, $eprint ) = @_;
+    return 'DO=(' . $eprint->get_value( 'id_number' ) . ')';
+}
+
+# Return a WoS query string using bibliographic metadata: author,
+# title, and year published
+sub _get_querystring_metadata
+{
+    my ( $plugin, $eprint ) = @_;
+
+    my $q;
+
+    # Title
+    my $ti = $eprint->get_value( "title" );
+    $ti =~ s/[^\p{Latin}\p{Number}]+/ /g; # WoS doesn't like punctuation
+
+    # First author
+    my $creator = @{$eprint->get_value( "creators_name" )}[0];
+    my $au = $creator->{family} . ", " . substr( $creator->{given}, 0, 1 ) . "*";
+    $au =~ s/[-\'\x{2019}]/\*/g; # WoS is inconsistent with - and '
+    $q = "AU=($au) AND TI=(\"$ti\")";
+
+    # Date published
+    my $py;
+    if ( $eprint->is_set( "date" ) )
+    {
+	$py = substr( $eprint->get_value( "date" ), 0, 4 );
+	$q = $q . " AND PY=$py";
+    }
+
+    # Reduce any unicode characters to plain old ASCII. Strips
+    # diacritics, splits digraphs, etc.
+    $q = unidecode($q); 
+
+    return $q;
+}
+
+#
+# Return a string containing the available elements from $som
+# describing the SOAP fault
+#
+sub _get_som_error
+{
+    my ( $plugin, $som ) = @_;
+
+    my $error = $som->faultcode() . "\n" . $som->faultstring();
+    $error .= "\nActor: " . $som->faultactor() if ( defined $som->faultactor() );
+    if ( defined $som->faultdetail() )
+    {
+        $error .= "\nDetail: ";
+        if ( ref( $som->faultdetail() ) eq 'HASH' )
+        {
+             $error .= Data::Dumper::Dumper( $som->faultdetail() );
+        }
+        else
+        {
+            $error .= $som->faultdetail();
+        }
+    }
+    return $error;
+}
+
+
+#
+# Return 1 if a given DOI is usable for searching WoS, or 0 if it is
+# not.
+#
+# Ideally, we would be able to encode all DOIs in such a manner as to
+# make them acceptable. However, we do not have any documentation as
+# to how problem characters might be encoded, or even any assurance
+# that it is possible at all.
+#
+sub _is_usable_doi
+{
+    my ( $doi ) = @_;
+
+    my $depth = 0;
+    if ( $doi =~ /[()]/ )
+    {
+        # The DOI contains parentheses, check they matched as WoS will
+        # only interpret the query correctly if they are matched.
+        my @chars = split //, $doi;
+        foreach my $char ( @chars )
+        {
+            if ( $char eq '(' )
+            {
+                $depth++;
+            } elsif ( $char eq ')' )
+            {
+                $depth--;
+            }
+            # Negative depth indicates a closing parenthesis has
+            # proceeded an opening parenthesis
+            return 0 if $depth < 0;
+        }
+    }
+    # If parentheses are matched, then depth will be zero at the end
+    # of the string.
+    return ($depth eq 0);
 }
 
 1;

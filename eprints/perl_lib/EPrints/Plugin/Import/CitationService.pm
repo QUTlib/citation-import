@@ -13,32 +13,40 @@ package EPrints::Plugin::Import::CitationService;
 # the dataset supplied by the caller. This function also re-tries failed
 # requests according to the "net_retry" and "parse_retry" parameters.
 #
-# Each sub-class of CitationService must implement the can_process(),
-# get_response() and response_to_epdata() functions. See the comments for the
-# individual functions for documentation.
+# Each sub-class of CitationService must implement can_process() and
+# get_epdata(). See the comments for the individual functions for
+# documentation.
 #
 ###############################################################################
 #
 # Copyright 2011 Queensland University of Technology. All Rights Reserved.
-# 
+#
 #  This file is part of the Citation Count Dataset and Import Plug-ins for GNU
 #  EPrints 3.
-#  
+#
 #  Copyright (c) 2011 Queensland University of Technology, Queensland, Australia
-#  
+#
 #  The plug-ins are free software; you can redistribute them and/or modify
 #  them under the terms of the GNU General Public License as published by
 #  the Free Software Foundation; either version 2 of the License, or
 #  (at your option) any later version.
-#  
+#
 #  The plug-ins are distributed in the hope that they will be useful,
 #  but WITHOUT ANY WARRANTY; without even the implied warranty of
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
-#  
+#
 #  You should have received a copy of the GNU General Public License
 #  along with EPrints 3; if not, write to the Free Software
 #  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+#
+######################################################################
+#
+# May 2013 / gregson:
+#
+# - Refactored process_eprints() to improve the abstract-concrete
+#   class interaction
+# - Revised exception handling
 #
 ######################################################################
 
@@ -77,7 +85,7 @@ sub input_text_fh
 	my @eprintids;
 
 	my $fh = $opts{fh};
-	
+
 	while( my $line = <$fh> )
 	{
 		next if ( !( $line =~ /^(\d+)/ ) );
@@ -90,12 +98,16 @@ sub input_text_fh
 	# clean up
 	$plugin->dispose;
 
-	return EPrints::List->new( 
-		dataset => $opts{dataset}, 
+	return EPrints::List->new(
+		dataset => $opts{dataset},
 		session => $plugin->{session},
 		ids => $ids );
 }
 
+
+#
+# Retrieve citation counts for all eprints in the live archive.
+#
 sub process_eprint_dataset
 {
 	my( $plugin, %opts ) = @_;
@@ -106,106 +118,80 @@ sub process_eprint_dataset
 	$opts{eprintids} = \@eprintids;
 
 	my $ids = $plugin->process_eprints( %opts ) || [];
-	
+
 	# clean up
 	$plugin->dispose;
 
-	return EPrints::List->new( 
-		dataset => $opts{dataset}, 
+	return EPrints::List->new(
+		dataset => $opts{dataset},
 		session => $plugin->{session},
 		ids => $ids );
 
 }
 
+#
+# Retrieve citation counts for all $opts{eprintids} and
+# returns a list of IDs successfully retrieved.
+#
 sub process_eprints
 {
-	my( $plugin, %opts ) = @_;
+    my( $plugin, %opts ) = @_;
 
-	my $eprintids = $opts{eprintids};
+    #print STDERR "processing_eprints() \n";
 
-	my @ids;
+    my $eprintids = $opts{eprintids};
 
-	LINE: foreach my $eprintid ( @{$eprintids||[]} )
-	{
-		my $eprint = $plugin->{session}->eprint( $eprintid );
-		if ( defined( $eprint ) )
-		{
-			next if !$plugin->can_process( $eprint );
+    my @ids;
 
-			# get citation data for this eprint, trying up to $plugin->{parse_retry}->{max} times
-			my $parse_tries_left = $plugin->{parse_retry}->{max};
+    # Iterate through each eprint in $eprintids
+  EPRINT: foreach my $eprintid ( @{$eprintids || []} )
+    {
+        #print STDERR "eprintid: $eprintid \n";
+        my $eprint = $plugin->{session}->eprint( $eprintid );
+        if ( defined( $eprint ) )
+        {
+            next if !$plugin->can_process( $eprint );
 
-			my $citedata = undef;
-			my $net_tries_left = $plugin->{net_retry}->{max};
-			while ( !defined( $citedata ) && $parse_tries_left > 0 )
-			{
-				# get a response from the service, trying up to $plugin->{net_retry}->{max} times
-				my $response = undef;
-				while ( !defined( $response ) && $net_tries_left > 0 )
-				{
-					$response = $plugin->get_response( $eprint );
-					if ( !defined( $response ) && $net_tries_left > 0 )
-					{
-						# no response; go to sleep before trying again
-						$plugin->warning(
-							"No response for EPrints ID " . $eprint->get_id . ". " .
-							"Waiting " . $plugin->{net_retry}->{interval} . " seconds before trying again."
-						);
-						sleep( $plugin->{net_retry}->{interval} );
-						$net_tries_left--;
-					}
-				}
+            my $citedata;
+            eval
+            {
+                $citedata = $plugin->get_epdata( $eprint );
+                1;
+            } or do
+            {
+                # Give up if get_epdata() fails and doesn't handle
+                # the exception
+                $plugin->error( "Error importing cites for EPrint ID $eprintid, skipping ALL eprints: " . $@ );
+                last EPRINT;
+            };
 
-				# if $response is undefined, the server is not responding
-				if ( !defined( $response ) )
-				{
-					$plugin->error( "No response after " . $plugin->{net_retry}->{max} . " attempts. Giving up." );
-					last LINE;
-				}
+            # Skip to the next eprint if get_response() has returned
+            # undef
+            if ( !defined $citedata )
+            {
+                $plugin->warning( "No matches found for EPrint ID $eprintid" );
+                next EPRINT;
+            }
 
-				# got a response; now try to parse it
-				$citedata = $plugin->response_to_epdata( $eprint, $response );
-				$parse_tries_left--;
-				if ( defined( $citedata ) )
-				{
-					# if there are keys in the hash, there was a hit
-					if ( scalar keys %{$citedata} > 0 ) {
-						# convert it to a data object
-						$citedata->{referent_id} = $eprint->get_id;
-						$citedata->{datestamp} = EPrints::Time::get_iso_timestamp();
-						my $dataobj = $plugin->epdata_to_dataobj( $opts{dataset}, $citedata );
-						if ( defined( $dataobj ) )
-						{
-							push @ids, $dataobj->get_id;
-						}
-					}
-				}
-				elsif ( $parse_tries_left > 0 )
-				{
-					# malformed response; go to sleep before trying again
-					$plugin->warning(
-						"Waiting " . $plugin->{parse_retry}->{interval} . " before trying again."
-					);
-					sleep( $plugin->{parse_retry}->{interval} );
-				}
-			}
+            # convert it to a data object
+            $citedata->{referent_id} = $eprintid;
+            $citedata->{datestamp} = EPrints::Time::get_iso_timestamp();
+            #print STDERR Dumper( $citedata ), "\n";
+            my $dataobj = $plugin->epdata_to_dataobj( $opts{dataset}, $citedata );
+            if ( defined $dataobj )
+            {
+                #print STDERR "[debug] Cite stored for EPrint ID $eprintid.\n";
+                push @ids, $dataobj->get_id;
+            }
+        }
+        else
+        {
+            $plugin->warning( "EPrint ID $eprintid does not exist." );
+        }
 
-			# if $citedata is undefined, the server is sending back stuff we can't parse
-			if ( !defined( $citedata ) )
-			{
-				$plugin->error( "Got " . $plugin->{parse_retry}->{max} . " malformed responses. Giving up." );
-				next LINE;
+    } # End EPRINT
 
-			}
-
-		}
-		else
-		{
-			$plugin->warning( "EPrint ID " . $eprintid . " does not exist." );
-		}
-	}
-
-	return \@ids;
+    return \@ids;
 }
 
 
@@ -227,39 +213,18 @@ sub can_process
 
 
 #
-# Get a response from the citation data service but don't parse it.
+# Returns an epdata hashref for a citation datum for $eprint or undef
+# if no matches were found in the citation service.
 #
-# The return value from this function will be passed to
-# response_to_epdata() at a later time.
+# Croaks if there are problems receiving or parsing responses from the
+# citation service, or if the citation service returns an error
+# response.
 #
-# Return an undefined value if the service didn't respond, or responded
-# with an error.
-#
-sub get_response
+sub get_epdata
 {
 	my ( $plugin, $eprint ) = @_;
 
 	$plugin->error( "EPrints::Plugin::Import::CitationService::get_response must be over-ridden." );
-
-	return undef;
-
-}
-
-
-#
-# Convert the response from an external service to an "epdata" hash
-# suitable for processing by EPrints::Plugin::Import::epdata_to_dataobj().
-#
-# Return a hash with no keys of the response indicates that the service has
-# no data for this eprint.
-#
-# Return an undefined value if the response could not be parsed.
-#
-sub response_to_epdata
-{
-	my ( $plugin, $eprint, $response ) = @_;
-
-	$plugin->error( "EPrints::Plugin::Import::CitationService::get_cites must be over-ridden." );
 
 	return undef;
 
@@ -272,4 +237,7 @@ sub response_to_epdata
 #
 sub dispose
 {
+    return;
 }
+
+1;

@@ -31,14 +31,9 @@ $c->{wos}->{get_uri_for_eprint} = sub
 # $c->{wos}->{AUTHENTICATE_NS} = 'http://auth.cxf.wokmws.thomsonreuters.com';
 
 # Configuration for a Premium account:
-# $c->{wos}->{WOKSEARCH_ENDPOINT} = 'http://search.webofknowledge.com/esti/wokmws/ws/WokSearch';
-# $c->{wos}->{WOKSEARCH_NS} = 'http://woksearch.cxf.wokmws.thomsonreuters.com';
-# $c->{wos}->{SERVICE_TYPE} = 'woksearch';
-
-# Configuration for a Lite account (default):
-# $c->{wos}->{WOKSEARCH_ENDPOINT} = 'http://search.webofknowledge.com/esti/wokmws/ws/WokSearchLite';
-# $c->{wos}->{WOKSEARCH_NS} = 'http://woksearchlite.cxf.wokmws.thomsonreuters.com';
-# $c->{wos}->{SERVICE_TYPE} = 'woksearchlite';
+#$c->{wos}->{WOKSEARCH_ENDPOINT} = 'http://search.webofknowledge.com/esti/wokmws/ws/WokSearch';
+#$c->{wos}->{WOKSEARCH_NS} = 'http://woksearch.cxf.wokmws.thomsonreuters.com';
+#$c->{wos}->{SERVICE_TYPE} = 'woksearch';
 
 # The maximum number of requests per session (default to 10,000):
 # $c->{wos}->{max_requests_per_session} = 10000;

@@ -30,6 +30,18 @@ package EPrints::Plugin::Import::CitationService::Scopus;
 #  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #
 ######################################################################
+#
+# May 2013 / gregson:
+#
+# - Added query fallbacks - EID to DOI to metadata - to improve match
+#   success rate and handle Scopus changing EIDs
+# - Revised and improved exception handling
+# - Corrected encoding of multi-byte characters in the query
+# - Added a call() method to handle HTTP requests with retry on
+#   transport failure
+# - Added a workaround for Scopus return malformed XML error responses
+#
+######################################################################
 
 use strict;
 
@@ -62,7 +74,16 @@ sub new
 		return $self;
 	}
 
-	return $self;
+
+        # An ordered list of the methods for generating querystrings
+        $self->{queries} = [qw{
+                               _get_querystring_eid
+                               _get_querystring_doi
+                               _get_querystring_metadata
+                    }];
+        $self->{current_query} = -1;
+
+        return $self;
 }
 
 
@@ -96,161 +117,287 @@ sub can_process
 
 
 #
-# Get the response from Scopus for a given eprint.
+# Returns an epdata hashref for a citation datum for $eprint or undef
+# if no matches were found in the citation service.
 #
-sub get_response
+# Croaks if there are problems receiving or parsing responses from the
+# citation service, or if the citation service returns an error
+# response.
+#
+sub get_epdata
 {
-	my ( $plugin, $eprint ) = @_;
+    my ( $plugin, $eprint ) = @_;
 
-	# construct a search term that will find this eprint
-	my $search;
-	if ( $eprint->is_set( "scopus_cluster" ) )
-	{
-		# search using Scopus' identifier
-		$search = "eid(" . $eprint->get_value( "scopus_cluster" ) . ")";
-	}
-	elsif ( $eprint->is_set( "id_number" ) && is_usable_doi( $eprint->get_value( "id_number" ) ) )
-	{
-		# search using DOI
-		$search = "doi(" . $eprint->get_value( "id_number" ) . ")";
-	}
-	else
-	{
-		# search using title and first author
-		my $title = $eprint->get_value( "title" );
-		utf8::decode($title);
-		$title =~ s/[^\p{Latin}\p{Number}]+/ /g;
-		my $authlastname = @{$eprint->get_value( "creators_name" )}[0]->{family};
-		utf8::decode($authlastname);
-		$authlastname =~ s/\x{2019}/'/;
-		$search = "title(\"$title\") and authlastname($authlastname)";
-		if ( $eprint->is_set( "date" ) )
-		{
-			# limit by publication year
-			my $pubyear = substr( $eprint->get_value( "date" ), 0, 4 );
-			$search = $search . " and pubyear is $pubyear";
-		}
-	}
+    my $eprintid = $eprint->get_id();
 
-	# build the URL from which we can download the data
-	my $quri = $SEARCHAPI->clone;
-	$quri->query_form(
+    # Repeatedly query the citation service until a matching record is
+    # found or all query methods have been tried without success.
+    my $response_xml;
+    my $found_a_match = 0;
+    $plugin->_reset_query_methods();
+  QUERY_METHOD: while ( !$found_a_match && defined $plugin->_next_query_method() )
+    {
+        my $search = $plugin->_get_query( $eprint );
+        next QUERY_METHOD if ( !defined $search );
+
+        # build the URL from which we can download the data
+        my $quri = $SEARCHAPI->clone;
+        $quri->query_form(
 		format => 'XML',
 		apiKey => $plugin->{dev_id},
-		search => $search
-	);
+		search => $search,
+            );
 
-	# send the query to Scopus
-	my $ua = LWP::UserAgent->new;
+        # Repeatedly query the citation service until a response is
+        # received or max allowed network requests has been reached.
+        my $response = $plugin->_call( $quri,
+                                       $plugin->{net_retry}->{max},
+                                       $plugin->{net_retry}->{interval}
+                                   );
 
-	if( EPrints::Utils::is_set( $ENV{http_proxy} ) )
-	{
-		$ua->proxy( 'http', $ENV{http_proxy} );
-	}
+        if ( !defined( $response ) )
+        {
+            # The server is not responding or there is a transport
+            # error, give up
+            die( "No response from Scopus after " . $plugin->{net_retry}->{max} .
+                 " attempts. Giving up." );
+        }
 
-	my $response = $ua->get( $quri );
+        # Got a response, now try to parse it
+        my $xml_parser = $plugin->{session}->xml;
+        # Workaround for malformed XML error responses part 1
+        my $status_code = '';
+        my $status_detail = '';
+        # End workaround part 1
+        eval
+        {
+            $response_xml = $xml_parser->parse_string( $response->content );
+            1;
+        } or do
+        {
+            # Workaround for malformed XML error responses part 2 --
+            # parse out the status code and detail using regex's
+            if ( $response->content =~ m/<statusCode[^>]*>([^<]+)<\/statusCode>/g )
+            {
+                $status_code = $1;
+            }
+            if ( $status_code eq 'ERROR' )
+            {
+                $plugin->warning( "Received malformed XML error response" );
+                if ( $response->content =~ m/<detail[^>]*>([^<]+)<\/detail>/g )
+		{
+		    $status_detail = $1;
+                }
+                $plugin->error( "Scopus responded with error condition for EPrint ID $eprintid: $status_code, " .
+                                $status_detail .
+                                ', Request URL: ' . $quri->as_string );
+                next QUERY_METHOD;
+            }
+            else
+            {
+                # End workaround part 2
+                $plugin->warning( "Unable to parse response XML: \n" . $@ . ": " .$response->content );
+                die( 'Unable to parse response' );
+            }
+        };
 
-	# Scopus has a maximum of 60 queries per minute, so sleep for a second
-	sleep(1);
+        $status_code = $plugin->get_response_status_code( $response_xml );
+        if ( $status_code ne 'OK' && $status_code ne 'PartOK' )
+        {
+            # Don't die on errors because these may be caused by data
+            # specific to a given eprint and dying would prevent
+            # updates for the remaining eprints
+            $plugin->error( "Scopus responded with error condition for EPrint ID $eprintid: $status_code, " .
+                            $plugin->get_response_status_detail( $response_xml ) .
+                            ', Request URL: ' . $quri->as_string );
+            next QUERY_METHOD;
+        }
 
-	if ( $response->is_success )
-	{
-		return $response;
-	}
-	else
-	{
-		$plugin->warning( "Unable to retrieve data from Scopus. The response was: " . $response->status_line . "\n" );
-		return undef;
-	}
+        $found_a_match = ( $plugin->get_number_matches( $response_xml ) > 0 );
+
+    } # End QUERY_METHOD
+
+    return undef if ( !$found_a_match );
+
+    return $plugin->response_to_epdata( $response_xml );
 }
+
+
+#
+# Select the next query method. Returns the
+# zero-based index thereof, or undef if all query options are
+# exhausted.
+#
+# By default these return undef, so concrete plugins don't need to
+# override.
+#
+sub _next_query_method
+{
+    my ( $plugin ) = @_;
+    if ( $plugin->{current_query} >= ( scalar @{$plugin->{queries}} - 1 ) )
+    {
+        $plugin->{current_query} = undef;
+        return undef;
+    }
+    return $plugin->{current_query}++;
+}
+
+#
+# Start iterating through the list of query methods again.
+#
+# next_query_method() must be called before the next query after a
+# call to this.
+#
+sub _reset_query_methods
+{
+    my ( $plugin ) = @_;
+    $plugin->{current_query} = -1;
+    return;
+}
+
+
+#
+# Return the query string from the current query method or undef if it
+# can't be created, e.g., if the eprint doesn't have the required
+# metadata for that query.
+#
+sub _get_query
+{
+    my ( $plugin, $eprint ) = @_;
+    my $query_generator_fname = $plugin->{queries}->[$plugin->{current_query}];
+    return $plugin->$query_generator_fname( $eprint );
+}
+
+
+#
+# Query methods return a valid query string or undef if the string
+# couldn't be generated.
+#
+
+sub _get_querystring_eid
+{
+    my ( $plugin, $eprint ) = @_;
+    return undef if ( !$eprint->is_set( 'scopus_cluster' )
+                      || $eprint->get_value( 'scopus_cluster' ) eq '-' );
+    return 'eid(' . $eprint->get_value( 'scopus_cluster' ) . ')';
+}
+
+sub _get_querystring_doi
+{
+    my ( $plugin, $eprint ) = @_;
+    return undef if ( !$eprint->is_set( 'id_number' )
+                      || !is_usable_doi( $eprint->get_value( 'id_number' ) ) );
+    return 'doi(' . $eprint->get_value( 'id_number' ) . ')';
+}
+
+sub _get_querystring_metadata
+{
+    my ( $plugin, $eprint ) = @_;
+    # search using title and first author
+
+    my $title = $eprint->get_value( 'title' );
+
+    # Remove question marks because do they seem to break Scopus
+    $title =~ s/\?//g;
+
+    my $authlastname = @{$eprint->get_value( 'creators_name' )}[0]->{family};
+
+    my $query = "title(\"$title\") and authlastname($authlastname)";
+    if ( $eprint->is_set( 'date' ) )
+    {
+        # limit by publication year
+        my $pubyear = substr( $eprint->get_value( 'date' ), 0, 4 );
+        $query = $query . " and pubyear is $pubyear";
+    }
+
+    return $query;
+}
+
+
+#
+# Return the content of the status/statusCode element
+#
+sub get_response_status_code
+{
+    my ( $plugin, $response_xml ) = @_;
+    my $status = $response_xml->documentElement->getChildrenByTagName( 'status' )->[0];
+    return $status->getChildrenByTagName( 'statusCode' )->[0]->textContent;
+}
+
+
+#
+# Return the content of the status/detail element
+#
+sub get_response_status_detail
+{
+    my ( $plugin, $response_xml ) = @_;
+    my $status = $response_xml->documentElement->getChildrenByTagName( "status" )->[0];
+    return $status->getChildrenByTagName( 'detail' )->[0]->textContent;
+}
+
+
+#
+# Return the number of records matched and returned in $response_xml
+#
+sub get_number_matches
+{
+    my ( $plugin, $response_xml ) = @_;
+    my $result = $response_xml->getElementsByTagName( "scopusSearchResults" )->[0];
+    return $result->getElementsByTagName( 'totalResults' )->[0]->textContent;
+}
+
 
 #
 # Convert the response from Scopus into an "epdata" hash.
 #
+# Assumes that this is response returned an OK or PartOK response and
+# there were matches to the query.
 sub response_to_epdata
 {
-	my ( $plugin, $eprint, $response ) = @_;
+    my ( $plugin, $response_xml ) = @_;
 
-	# parse the document
-	my $doc;
-	my $xml = $plugin->{session}->xml;
-	eval {
-		$doc = $xml->parse_string( $response->content );
-		1;
-	}
-	or do
-	{
-		$plugin->warning( "Got a malformed response for EPrint ID " . $eprint->get_id . ": " . $response->content );
-		return undef;
-	};
-
-	# get the status code
-	my $status_code = undef;
-	my ( $status ) = $doc->documentElement->getChildrenByTagName( "status" );
-	if ( defined( $status ) )
-	{
-		my ( $child ) = $status->getChildrenByTagName( "statusCode" );
-		if ( defined( $child ) )
-		{
-			$status_code = $child->textContent;
-		}
-	}
-
-	# get the citation count
-	my $epdata = undef;
-	if ( defined( $status_code ) )
-	{
-		if ( $status_code eq "OK" || $status_code eq "PartOK" )
-		{
-			# get the results of the search
-			my ( $result ) = $doc->getElementsByTagName( "scopusSearchResults" );
-			if ( defined( $result ) )
-			{
-				my ( $results_count ) = $result->getElementsByTagName( "returnedResults" );
-
-				if ( defined( $results_count ) && $results_count->textContent > 0 )
-				{
-					# get the electronic id and the citation count
-					my ( $record ) = $result->getElementsByTagName( "scopusResult" );
-					if ( defined ( $record ) )
-					{
-						my $eid = shift @{$record->getElementsByTagName( "eid" )};
-						my $citation_count = shift @{$record->getElementsByTagName( "citedbycount" )};
-						$epdata = {
-							cluster => $eid->textContent,
-							impact => $citation_count->textContent,
-						};
-					}
-				}
-				else
-				{
-					$plugin->warning( "No records found for EPrint ID " . $eprint->get_id . "." );
-					$epdata = {};
-				}
-			}
-		}
-		else
-		{
-			# the search failed; log the detailed error message
-			my ( $detail ) = $status->getChildrenByTagName( "detail" );
-			if ( defined ( $detail ) )
-			{
-				$plugin->warning( "EPrint ID " . $eprint->get_id . ": " . $detail->textContent );
-			}
-			$epdata = {};
-		}
-	}
-
-	if ( !defined( $epdata ) )
-	{
-		$plugin->warning( "Could not parse the response for EPrint ID " . $eprint->get_id . ": " . $response->content );
-	}
+    my $result = shift @{$response_xml->getElementsByTagName( "scopusSearchResults" )};
+    my $record = shift @{$result->getElementsByTagName( "scopusResult" )};
+    my $eid = shift @{$record->getElementsByTagName( "eid" )};
+    my $citation_count = shift @{$record->getElementsByTagName( "citedbycount" )};
+    return { cluster => $eid->textContent,
+             impact => $citation_count->textContent };
+}
 
 
-	# clean up
-	$xml->dispose( $doc );
+#
+# Make an HTTP GET request to $uri and return the response. Will retry
+# up to $max_retries times after $retry_delay in the event of a
+# failure.
+#
+sub _call
+{
+    my ( $plugin, $uri, $max_retries, $retry_delay) = @_;
 
-	return $epdata;
+    my $ua = LWP::UserAgent->new;
+    if ( EPrints::Utils::is_set( $ENV{http_proxy} ) )
+    {
+        $ua->proxy( 'http', $ENV{http_proxy} );
+    }
+
+    my $response = undef;
+    my $net_tries_left = $max_retries;
+    while ( !defined $response && $net_tries_left > 0 )
+    {
+        $response = $ua->get( $uri );
+
+        if ( !$response->is_success )
+        {
+            # no response; go to sleep before trying again
+            $plugin->warning( 'Unable to retrieve data from Scopus. The response was: ' . $response->status_line .
+                              "Waiting " . $retry_delay . " seconds before trying again."
+                          );
+            sleep( $retry_delay );
+            $net_tries_left--;
+            $response = undef;
+        }
+    }
+    return $response;
 }
 
 
