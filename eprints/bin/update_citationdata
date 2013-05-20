@@ -620,6 +620,7 @@ sub get_all_eprintids
 		session => $session,
 		dataset => $dataset,
 		custom_order => "eprintid",
+		allow_blank => 1,
 	);
 	my $list = $searchexp->perform_search;
 	my @ids = @{$list->ids};
