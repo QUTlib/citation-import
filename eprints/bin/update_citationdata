@@ -614,20 +614,11 @@ sub get_eprintids_for_last_hour
 #
 sub get_all_eprintids
 {
-	my ( $session, $dataset ) = @_;
+        my ( $session, $dataset ) = @_;
 
-	my $searchexp = EPrints::Search->new(
-		session => $session,
-		dataset => $dataset,
-		custom_order => "eprintid",
-		allow_blank => 1,
-	);
-	my $list = $searchexp->perform_search;
-	my @ids = @{$list->ids};
-	$list->dispose;
-
-	return @ids;
+        return @{$dataset->search()->reorder( 'eprintid' )->ids};
 }
+
 
 
 #
