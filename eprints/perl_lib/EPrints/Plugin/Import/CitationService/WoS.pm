@@ -31,6 +31,12 @@ package EPrints::Plugin::Import::CitationService::WoS;
 #
 ######################################################################
 #
+# May 2013 / sf2:
+#
+# - if an EPrint's UT has changed, re-do a search instead of die()'ing
+#
+######################################################################
+#
 # May 2013 / gregson:
 #
 # - Revised and improved exception handling
@@ -447,6 +453,19 @@ sub get_cites_for_identifier
 
 	if ( $som->fault() )
 	{
+		# sf2 / we can catch InvalidInputException here which is thrown when WoS doesn't know the id/UT. In this case we just need to search for that eprint again.
+		my $fault = $som->faultdetail();
+		if( defined $fault && ref( $fault ) eq 'HASH' && exists $fault->{InvalidInputException} )
+		{
+			# new uid?
+			my $new_uid = $plugin->_retrieve_uid( $eprint, $soap );
+			if( defined $new_uid && $new_uid ne $uid )	# not fearing a stack overflow!
+			{
+				return $plugin->get_cites_for_identifier( $eprint, $new_uid, $soap );
+			}
+			return undef;
+		}
+
             # MG To do: it would be useful to log the serialized call
             # here if the faultcode eq 'Client'
 	    die( "Unable to retrieve cites for EPrint ID " . $eprint->get_id .
