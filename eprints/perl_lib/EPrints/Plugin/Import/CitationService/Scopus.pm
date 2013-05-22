@@ -295,19 +295,25 @@ sub _get_querystring_metadata
     my ( $plugin, $eprint ) = @_;
     # search using title and first author
 
-    my $title = $eprint->get_value( 'title' );
+    my $title = $eprint->get_value( 'title' ) || '';
 
     # Remove question marks because do they seem to break Scopus
     $title =~ s/\?//g;
+    
+    my $query = "title(\"$title\")";
 
-    my $authlastname = @{$eprint->get_value( 'creators_name' )}[0]->{family};
-
-    my $query = "title(\"$title\") and authlastname($authlastname)";
+    my @authors = @{$eprint->value( 'creators_name' )||[]};
+    if( scalar( @authors ) > 0 )
+    {
+	    my $authlastname = $authors[0]->{family};
+	    $query .= " and authlastname($authlastname)";
+    }
+    
     if ( $eprint->is_set( 'date' ) )
     {
         # limit by publication year
         my $pubyear = substr( $eprint->get_value( 'date' ), 0, 4 );
-        $query = $query . " and pubyear is $pubyear";
+        $query .= " and pubyear is $pubyear";
     }
 
     return $query;
