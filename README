@@ -7,7 +7,6 @@ Changelog
 - December 2012 (sf2)
 
 (*) WoS: added support for v3 of the API
-(*) WoS: added support for Lite or Premium account
 (*) WoS: added restrictions for the maximum number of requests per seconds (2) 
 and per session (10,000)
 (*) WoS: Unicode patch for queries
@@ -31,10 +30,10 @@ Scopus:
   key for the API. See https://www.developers.elsevier.com/cms/index.
 
 Web of Science:
-  The Web of Science plug-in uses Web of Science Web Services Premium or Lite. 
-  In addition to possessing a subscription to Web of Science, your institution 
-  must sign up for access to the web services at
-  http://wokinfo.com/products_tools/products/related/webservices/.
+  The Web of Science plug-in uses Web of Science Web Services Premium. 
+  Access to Web Services Premium is automatic once you are subscribed to Web 
+  of Science and InCites. Note: Web Services Lite is not supported by the 
+  plugins as it no longer provides citation data. 
 
 Google Scholar:
   The Google Scholar plug-in is a screen-scraper based on the Export::GScholar
