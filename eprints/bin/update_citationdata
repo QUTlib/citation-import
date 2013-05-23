@@ -104,14 +104,6 @@ Re-try failed network requests up to NUM times (default 4).
 
 Re-try failed network requests after INT seconds (default 900).
 
-=item B<--parse-retry-max NUM>
-
-Re-request an unparseable response up to NUM times (default 5).
-
-=item B<--parse-retry-interval INT>
-
-Re-request an unparseable response after INT seconds (default 360).
-
 =item B<--help>
 
 Print a brief help message and exit.
@@ -160,8 +152,6 @@ my $period = "day";
 my $logfile = undef;
 my $net_retry_max = undef;
 my $net_retry_interval = undef;
-my $parse_retry_max = undef;
-my $parse_retry_interval = undef;
 my $verbose = 0;
 my $quiet = 0;
 my $help = 0;
@@ -178,8 +168,6 @@ GetOptions(
 	'log=s' => \$logfile,
 	'net-retry-max=i' => \$net_retry_max,
 	'net-retry-interval=i' => \$net_retry_interval,
-	'parse-retry-max=i' => \$parse_retry_max,
-	'parse-retry-interval=i' => \$parse_retry_interval,
 	'help|?' => \$help,
 	'man' => \$man,
 	'verbose+' => \$verbose,
@@ -447,14 +435,6 @@ if ( defined $net_retry_max )
 if ( defined $net_retry_interval )
 {
 	push @args, "--net-retry-interval", $net_retry_interval;
-}
-if ( defined $parse_retry_max )
-{
-	push @args, "--parse-retry-max", $parse_retry_max;
-}
-if ( defined $parse_retry_interval )
-{
-	push @args, "--parse-retry-interval", $parse_retry_interval;
 }
 if ( $noise == 0 )
 {
