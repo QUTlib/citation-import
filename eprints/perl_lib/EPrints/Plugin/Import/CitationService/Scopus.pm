@@ -49,6 +49,7 @@ use EPrints::Plugin::Import::CitationService;
 our @ISA = ( "EPrints::Plugin::Import::CitationService" );
 
 use LWP::UserAgent;
+use Unicode::Normalize qw(NFKC);
 use URI;
 
 our $SEARCHAPI = URI->new( "http://searchapi.scopus.com/documentSearch.url" );
@@ -141,12 +142,7 @@ sub get_epdata
         next QUERY_METHOD if ( !defined $search );
 
         # build the URL from which we can download the data
-        my $quri = $SEARCHAPI->clone;
-        $quri->query_form(
-		format => 'XML',
-		apiKey => $plugin->{dev_id},
-		search => $search,
-            );
+        my $quri = $plugin->_get_query_uri( $search );
 
         # Repeatedly query the citation service until a response is
         # received or max allowed network requests has been reached.
@@ -295,12 +291,26 @@ sub _get_querystring_metadata
     my ( $plugin, $eprint ) = @_;
     # search using title and first author
 
-    my $title = $eprint->get_value( 'title' ) || '';
+    # Decompose ligatures into component characters - Scopus doesn't
+    # match ligatures. Note, this is a compatibility normalisation
+    # that changes characters and potentially this could change the
+    # title sufficiently so that Scopus won't find a match.
+    my $title = NFKC( $eprint->get_value( 'title' ) ) || '';
 
-    # Remove question marks because do they seem to break Scopus
-    $title =~ s/\?//g;
-    
-    my $query = "title(\"$title\")";
+    # Remove these because they break the query parser
+    $title =~ s/[%]/ /g; # percentages
+    $title =~ s/["\x{E2809C}\x{E2809D}]/ /g; # various double quotation marks
+
+    $title .= "\""; # close the phrase search quotation marks
+
+    # Question marks and asterixes are both wildcard characters and
+    # won't make a literal match or will break the parser if left in.
+    # The workaround is to add one to the end of the querystring
+    # wrapped in the curly brackets (the equivalent of escaping them)
+    $title .= "{?}" if ( $title =~ s/[?]/ /g );
+    $title .= "{*}" if ( $title =~ s/[*]/ /g );
+
+    my $query = "title(\"$title)";
 
     my @authors = @{$eprint->value( 'creators_name' )||[]};
     if( scalar( @authors ) > 0 )
@@ -421,6 +431,18 @@ sub is_usable_doi
 
 	# DOIs containing parentheses confuse Scopus because it uses them as delimiters
 	return !( $doi =~ /[()]/ );
+}
+
+sub _get_query_uri
+{
+    my ( $plugin, $search ) = @_;
+
+    my $quri = $SEARCHAPI->clone;
+    $quri->query_form( format => 'XML',
+		       apiKey => $plugin->{dev_id},
+		       search => $search,
+		     );
+    return $quri;
 }
 
 1;
