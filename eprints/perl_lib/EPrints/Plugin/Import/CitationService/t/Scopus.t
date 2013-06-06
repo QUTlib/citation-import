@@ -1,6 +1,6 @@
  #!/usr/bin/env perl
-use lib qw(/usr/local/eprints/perl_lib);
-use lib qw(/usr/local/eprints/archives/quteprints/cfg/plugins);
+use lib qw(/opt/eprints3/perl_lib);
+use lib qw(/opt/eprints3/archives/quteprints/cfg/plugins);
 
 # The test data contains Unicode so this file should be saved as UTF-8
 use utf8;
