@@ -387,7 +387,7 @@ sub _call
     }
 
     my $response = undef;
-    my $net_tries_left = $max_retries;
+    my $net_tries_left = $max_retries + 1;
     while ( !defined $response && $net_tries_left > 0 )
     {
         $response = $ua->get( $uri );
