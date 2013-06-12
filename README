@@ -4,6 +4,35 @@ Citation Count Dataset and Import Plug-ins for GNU EPrints 3
 Changelog
 ---------
 
+- May-June 2013 (MrkGrgsn w/sf2)
+
+(*) Refactored process_eprints() to improve the abstract-concrete
+class interaction.
+(*) bin script: removed parse_retry functionality
+(*) Scopus: added query fallbacks to Scopus - EID to DOI to metadata -
+improves match success rate and handle changed EIDs.
+(*) Scopus: corrected encoding of multi-byte characters in the query
+string w/URI 1.60
+(*) Scopus: added a call() method to Scopus to perform HTTP requests
+with retry on transport failure
+(*) Scopus: added a workaround for Scopus return malformed XML error
+responses
+(*) Scopus: refined metadata querystring generation to handle more
+special characters
+(*) WoS: configured Web Services Premium by default (Lite doesn't
+work)
+(*) WoS: added DOI filtering to remove ones with mismatched
+parenthesis that WoS can't interpret
+(*) WoS: fixed a character escaping issue in the userQuery element
+(*) WoS: modified get_session() and dispose() to use $plugin->call()
+(*) WoS: get_uri_for_eprint() now links direct to the record via the
+WoS OpenURL URI
+
+- May 2013 (sf2)
+
+(*) Scopus: don't fail if an EPrint has no title
+(*) WoS: if an EPrint's UT has changed, re-do a search instead of die()'ing
+
 - December 2012 (sf2)
 
 (*) WoS: added support for v3 of the API
@@ -36,17 +65,25 @@ Web of Science:
   plugins as it no longer provides citation data. 
 
 Google Scholar:
-  The Google Scholar plug-in is a screen-scraper based on the Export::GScholar
-  plug-in shipped with EPrints 3.2. See
-  http://scholar.google.com/intl/en/scholar/about,html. Google's full terms of
-  use are at http://www.google.com/accounts/TOS.
+  The Google Scholar plug-in is a screen-scraper based on the
+  Export::GScholar plug-in shipped with EPrints 3.2. See
+  http://scholar.google.com/intl/en/scholar/about,html. Google's full
+  terms of use are at http://www.google.com/accounts/TOS. This plugin
+  is not actively maintained.
 
 
 Installation
 ------------
 
-Before using the import plug-ins, you need to install SOAP::Lite (for Web of
-Science) and WWW::Mechanize::Sleepy (for Google Scholar) from CPAN.
+Before using the import plug-ins, you need to install the following
+from CPAN:
+(*) Unicode::Normalize (for Scopus)
+(*) SOAP::Lite (for Web of Science)
+(*) WWW::Mechanize::Sleepy (for Google Scholar)
+(*) URI. It is recommended that you upgrade the URI package by
+updating the one packaged with EPrints in perl_lib or by deleting that
+one and using the latest from CPAN. NOTE: ensure that URI::OpenURL
+remains installed.
 
 1. Copy all of the files in the 'eprints' sub-directory into the root directory
    of your EPrints installation, e.g. 'cp -R eprints/* /opt/eprints3'

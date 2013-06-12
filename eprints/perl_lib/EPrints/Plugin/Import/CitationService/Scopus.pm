@@ -31,7 +31,13 @@ package EPrints::Plugin::Import::CitationService::Scopus;
 #
 ######################################################################
 #
-# May 2013 / gregson:
+# May 2013 / sf2:
+#
+# - don't fail if an EPrint has no title
+#
+######################################################################
+#
+# May-June 2013 / gregson:
 #
 # - Added query fallbacks - EID to DOI to metadata - to improve match
 #   success rate and handle Scopus changing EIDs
@@ -40,6 +46,8 @@ package EPrints::Plugin::Import::CitationService::Scopus;
 # - Added a call() method to handle HTTP requests with retry on
 #   transport failure
 # - Added a workaround for Scopus return malformed XML error responses
+# - Refined metadata querystring generation to handle more special
+#   characters
 #
 ######################################################################
 
