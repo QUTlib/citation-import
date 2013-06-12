@@ -6,20 +6,39 @@
 $c->{wos} = {};
 
 #
-# The base URL for Web of Science.
+# The base URL for Web of Science and WoS OpenURL.
 #
 $c->{wos}->{uri} = URI->new( 'http://isiknowledge.com/wos' );
+$c->{wos}->{openurl_uri} =  URI->new( 'http://ws.isiknowledge.com/cps/openurl/service' );
 
 #
-# We don't (yet) have any way of linking to a particular paper within Web of
-# Science, so this function just returns the base URL.
+# Use WoS' OpenURL to link to the record.
 #
 $c->{wos}->{get_uri_for_eprint} = sub
 {
 	my ( $eprint ) = @_;
 
+        if ( $eprint->is_set( 'wos_cluster' ) )
+        {
+            my $uri =$eprint->repository->config( 'wos', 'openurl_uri' )->clone;
+            $uri->query_form(
+                'url_ver' => 'Z39.88-2004',
+                'rft_val_fmt' => 'info:ofi/fmt:kev:mtx:journal',
+                'svc.fullrec' => 'yes',
+                'rft_id' => 'info:ut/' . $eprint->get_value( 'wos_cluster' ),
+
+                # MG: The following params were in the example but
+                # don't seem to be required ...
+                #'svc_val_fmt' => 'info:ofi/fmt:kev:mtx:sch_svc',
+                #'rft.genre' => 'article',
+                #'rfr_id' => 'info:sid/qut.edu.au:blah',
+                #'req_id' => 'mailto:blah@qut.edu.au',
+            );
+            return $uri;
+        }
+
 	return $eprint->repository->config( 'wos', 'uri' )->clone;
-}
+};
 
 #
 # You may change the services type and endpoints here
