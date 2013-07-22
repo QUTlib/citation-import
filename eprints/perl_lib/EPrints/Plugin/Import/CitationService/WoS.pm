@@ -494,7 +494,7 @@ sub response_to_epdata
 	# sanity check
 	if ( !defined( $response->{recordsFound} ) || !defined( $response->{ut} ) )
 	{
-            $plugin->warning( "Got an unusable response: " . Data::Dumper( $response ) );
+            $plugin->warning( "Got an unusable response: " . Dumper( $response ) );
             die( 'Unable to parse citingArticles response from WoS' );
 	}
 
