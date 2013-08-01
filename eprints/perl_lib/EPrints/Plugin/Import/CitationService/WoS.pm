@@ -31,6 +31,12 @@ package EPrints::Plugin::Import::CitationService::WoS;
 #
 ######################################################################
 #
+# Aug 2013 / gregson:
+#
+# - set SOAPAction HTTP header to an empty string
+#
+######################################################################
+#
 # May 2013 / sf2:
 #
 # - if an EPrint's UT has changed, re-do a search instead of die()'ing
@@ -95,7 +101,7 @@ sub new
 	my $self = $class->SUPER::new( %params );
 
 	# set some parameters
-	$self->{name} = "Web of Science Citation Ingest";
+	$self->{name} = "Web of Science(R) Citation Ingest";
 
 	# load the necessary Perl libraries
 	if( !EPrints::Utils::require_if_exists( "SOAP::Lite" ) )
@@ -194,6 +200,8 @@ sub get_epdata
 		proxy => $WOK_CONF->{WOKSEARCH_ENDPOINT},
 		autotype => 0,
 	);
+        # set soapAction to an empty string
+        $soap->on_action( sub { return ''; } );
 	$soap->transport->http_request->header( "Cookie" => "SID=\"" . $plugin->{session_id} . "\";" );
 
 	# get the WoS identifier ("UT") for this eprint
@@ -336,7 +344,7 @@ sub get_search_for_eprint
 
             # MG To Do: it would be useful to log the serialized call
             # here - logging the userQuery is a good start.
-            $plugin->error( "Unable to retrieve UID from Web of Science for EPrint ID " . $eprint->get_id .
+            $plugin->error( "Unable to retrieve UID from Web of Science(R) for EPrint ID " . $eprint->get_id .
                             ": \n" . $plugin->_get_som_error( $som ) . ", userQuery = $q" );
             return undef;
 	}
@@ -524,6 +532,8 @@ sub get_session
 		proxy => $WOK_CONF->{AUTHENTICATE_ENDPOINT},
 		default_ns => $WOK_CONF->{AUTHENTICATE_NS},
 	);
+        # set soapAction to an empty string
+        $soap->on_action( sub { return ''; } );
 
         # sf2 / using custom type as the WoS WS doesn't like the
         # attributes added by SOAP::Lite.  this will call
@@ -561,6 +571,8 @@ sub dispose
 			proxy => $WOK_CONF->{AUTHENTICATE_ENDPOINT},
 			default_ns => $WOK_CONF->{AUTHENTICATE_NS}
 		);
+                # set soapAction to an empty string
+                $soap->on_action( sub { return ''; } );
 		$soap->transport->http_request->header( "Cookie" => "SID=\"" . $plugin->{session_id} . "\";" );
 
 		# close the session
