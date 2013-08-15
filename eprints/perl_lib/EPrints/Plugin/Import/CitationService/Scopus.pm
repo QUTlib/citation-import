@@ -435,11 +435,19 @@ sub _call
 #
 sub is_usable_doi
 {
-	my ( $doi ) = @_;
+        my ( $doi ) = @_;
 
-	# DOIs containing parentheses confuse Scopus because it uses them as delimiters
-	return !( $doi =~ /[()]/ );
+        return 0 if( !EPrints::Utils::is_set( $doi ) );
+
+        $doi =~ s/^http:\/\/dx\.doi\.org//;
+        $doi =~ s/^doi://;
+
+        return 0 if( $doi !~ /^10\.\d\d\d\d\// );
+
+        # DOIs containing parentheses confuse Scopus because it uses them as delimiters
+        return !( $doi =~ /[()]/ );
 }
+
 
 sub _get_query_uri
 {
