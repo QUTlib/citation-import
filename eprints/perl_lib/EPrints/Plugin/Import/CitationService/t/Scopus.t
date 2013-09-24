@@ -80,6 +80,18 @@ my $nomatches_epdata = [
 # These ones should match in Scopus
 my $matches_epdata = [
 	    {
+	     title => 'Market shares, R&D agreements, and the EU block exemption',
+	     creators => [
+			  {
+			   name => {
+				    family => 'Ruble',
+				   },
+			  },
+			 ],
+             date => '2014',
+	     eprint_status => 'inbox',
+	    },
+	    {
 	     title => 'Which tests do neuropsychologists use?',
 	     creators => [
 			  {
