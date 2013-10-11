@@ -297,6 +297,30 @@ my $matches_epdata = [
              date => '2008',
 	     eprint_status => 'inbox',
 	    },
+	    {
+	     title => 'Kaolinite particle sizes in the <2 μM range using laser scattering',
+	     creators => [
+	        	  {
+	        	   name => {
+	        		    family => 'Mackinnon',
+	        		   },
+	        	  },
+	        	 ],
+             date => '1993',
+	     eprint_status => 'inbox',
+	    },
+	    {
+	     title => 'Scaling of free convection heat transfer in a triangular cavity for Pr>1',
+	     creators => [
+	        	  {
+	        	   name => {
+	        		    family => 'Saha',
+	        		   },
+	        	  },
+	        	 ],
+             date => '2011',
+	     eprint_status => 'inbox',
+	    },
 	   ];
 
 

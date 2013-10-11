@@ -306,7 +306,7 @@ sub _get_querystring_metadata
     my $title = NFKC( $eprint->get_value( 'title' ) ) || '';
 
     # Remove these because they break the query parser
-    $title =~ s/[%&]/ /g; # percentages, ampersands
+    $title =~ s/[%&<>]/ /g; # percentages, ampersands
     $title =~ s/["\x{E2809C}\x{E2809D}]/ /g; # various double quotation marks
 
     $title .= "\""; # close the phrase search quotation marks
