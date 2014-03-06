@@ -64,7 +64,7 @@ Web of Science:
   of Science and InCites. Note: Web Services Lite is not supported by the 
   plugins as it no longer provides citation data. 
 
-Google Scholar:
+Google Scholar (NOT SUPPORTED):
   The Google Scholar plug-in is a screen-scraper based on the
   Export::GScholar plug-in shipped with EPrints 3.2. See
   http://scholar.google.com/intl/en/scholar/about,html. Google's full
@@ -127,6 +127,15 @@ counts for any given eprint are cached in the 'scopus', 'wos' and 'gscholar'
 fields of that eprint. E.g. to display Scopus' citation count on an eprint's
 summary page, put <epc:print expr="scopus_impact"/> in the appropriate place
 of your summary_page.xml.
+
+
+Support
+-------
+
+For general support enquiries please use the EPrints Tech List at 
+http://www.eprints.org/tech.php/
+
+Bugs and and feature requests can be logged in GitHub.
 
 
 Contributors
