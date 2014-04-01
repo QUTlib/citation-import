@@ -38,13 +38,13 @@ Installation
 Before using the import plug-ins, you need to install the following
 from CPAN:
 
-* Unicode::Normalize (for Scopus)
-* SOAP::Lite (for Web of Science)
-* WWW::Mechanize::Sleepy (for Google Scholar)
-* URI. It is recommended that you upgrade the URI package by
-  updating the one packaged with EPrints in *perl_lib* or by deleting that
-  one and using the latest from CPAN. NOTE: ensure that URI::OpenURL
-  remains installed.
+* `Unicode::Normalize` (for Scopus)
+* `SOAP::Lite` (for Web of Science)
+* `WWW::Mechanize::Sleepy` (for Google Scholar)
+* `URI`. It is recommended that you upgrade the URI package by
+updating the one packaged with EPrints in *perl_lib* or by deleting that
+one and using the latest from CPAN. *NOTE:* ensure that `URI::OpenURL`
+remains installed.
 
 1.  Copy all of the files in the *eprints* sub-directory into the root directory
     of your EPrints installation, e.g. `cp -R eprints/* /opt/eprints3`
