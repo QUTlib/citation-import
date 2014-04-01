@@ -10,26 +10,26 @@ but requests that robots do not extract data from its web site (so you should
 only use the plug-in to conduct searches triggered manually). See the web sites
 listed below for the details for each service.
 
-Scopus:
+### Scopus
 
-> The Scopus plug-in uses the Scopus Document Search API (the XML web service
-> that underpins the JavaScript APIs). Your institution requires a developer
-> key for the API. See https://www.developers.elsevier.com/cms/index.
+  The Scopus plug-in uses the Scopus Document Search API (the XML web service
+  that underpins the JavaScript APIs). Your institution requires a developer
+  key for the API. See https://www.developers.elsevier.com/cms/index.
 
-Web of Science:
+### Web of Science:
 
-> The Web of Science plug-in uses Web of Science Web Services Premium.
-> Access to Web Services Premium is automatic once you are subscribed to Web
-> of Science and InCites. Note: Web Services Lite is not supported by the
-> plugins as it no longer provides citation data.
+  The Web of Science plug-in uses Web of Science Web Services Premium.
+  Access to Web Services Premium is automatic once you are subscribed to Web
+  of Science and InCites. Note: Web Services Lite is not supported by the
+  plugins as it no longer provides citation data.
 
-Google Scholar (NOT SUPPORTED):
+### Google Scholar (NOT SUPPORTED):
 
-> The Google Scholar plug-in is a screen-scraper based on the
-> Export::GScholar plug-in shipped with EPrints 3.2. See
-> http://scholar.google.com/intl/en/scholar/about,html. Google's full
-> terms of use are at http://www.google.com/accounts/TOS. This plugin
-> is not actively maintained.
+  The Google Scholar plug-in is a screen-scraper based on the
+  Export::GScholar plug-in shipped with EPrints 3.2. See
+  http://scholar.google.com/intl/en/scholar/about,html. Google's full
+  terms of use are at http://www.google.com/accounts/TOS. This plugin
+  is not actively maintained.
 
 
 Installation
