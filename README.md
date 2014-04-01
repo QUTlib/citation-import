@@ -74,7 +74,7 @@ Using the Plug-ins
 ------------------
 
 You can import citation data into your database using the *import_citationdata*
-and *update_citationdata scripts.*
+and *update_citationdata* scripts.
 
 *import_citationdata* requests data for a given list of eprint IDs.
 
