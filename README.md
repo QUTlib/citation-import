@@ -1,4 +1,4 @@
-Citation Count Dataset and Import Plug=ins for GNU EPrints 3
+Citation Count Dataset and Import Plug-ins for GNU EPrints 3
 ============================================================
 
 These scripts and plug-ins enable an EPrints repository to retrieve and store
