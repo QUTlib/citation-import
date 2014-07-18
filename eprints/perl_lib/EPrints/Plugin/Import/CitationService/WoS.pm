@@ -88,9 +88,6 @@ our $WOK_CONF = {
 # the database editions to search. These can be locally defined, see "sub new()".
 our $EDITIONS = [qw/ SCI SSCI AHCI IC CCR ISTP ISSHP /];
 
-# the SOAP structures - will be built at run-time
-our $SOAP_EDITIONS = [];
-
 #
 # Create a new plug-in object.
 #
@@ -111,6 +108,7 @@ sub new
 		return $self;
 	}
 
+	my $editions;
 	if( defined $self->{session} )
 	{
 		foreach my $confid ( keys %$WOK_CONF )
@@ -126,10 +124,14 @@ sub new
 		my $local_editions = $self->{session}->config( 'wos', 'editions' );
 		if( EPrints::Utils::is_set( $local_editions ) )
 		{
-			$EDITIONS = EPrints::Utils::clone( $local_editions );
+			$editions = EPrints::Utils::clone( $local_editions );
 		}
 
 		$self->{max_requests} = $self->{session}->config( 'wos', 'max_requests_per_session' );
+	}
+	if ( !defined $editions )
+	{
+		$editions = EPrints::Utils::clone( $EDITIONS );
 	}
 
 	$self->{max_requests} ||= 10_000;
@@ -140,9 +142,10 @@ sub new
 	# the databaseID or databaseId is always "WOS" (case is important in SOAP)
 	$self->{query}->{databaseId} = SOAP::Data->name( "databaseId" => "WOS" );
 
-	foreach my $edition ( @$EDITIONS )
+	$self->{soap_editions} = [];
+	foreach my $edition ( @$editions )
 	{
-		push @$SOAP_EDITIONS, SOAP::Data->name( "editions" => \SOAP::Data->value(
+		push $self->{soap_editions}, SOAP::Data->name( "editions" => \SOAP::Data->value(
 			SOAP::Data->name( "collection" => "WOS" ),
 			SOAP::Data->name( "edition" => "$edition" ),
  	       ) );
@@ -310,7 +313,7 @@ sub get_search_for_eprint
         # namespace declarataion to stop the server complaining
 	push @query_params, SOAP::Data->name( "userQuery" => $q )->type( 'string' )->attr( { "xmlns:xsd" => "http://www.w3.org/2001/XMLSchema" } );
 
-	push @query_params, @$SOAP_EDITIONS;
+	push @query_params, @{$plugin->{soap_editions}};
 	push @query_params, $date_param;
 	push @query_params, $plugin->{query}->{queryLanguage};
 	
@@ -450,7 +453,7 @@ sub get_cites_for_identifier
         my @params;
         push @params, $plugin->{query}->{databaseId};
         push @params, SOAP::Data->name( 'uid' => $uid );
-        push @params, @$SOAP_EDITIONS;
+        push @params, @{$plugin->{soap_editions}};
         push @params, $date_param;
         push @params, $plugin->{query}->{queryLanguage};
         push @params, SOAP::Data->name( "retrieveParameters" => \$retrieve_params );
