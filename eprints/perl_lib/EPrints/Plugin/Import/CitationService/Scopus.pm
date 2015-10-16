@@ -35,12 +35,6 @@ package EPrints::Plugin::Import::CitationService::Scopus;
 # October 2015 / Matty K:
 #
 # - update to use new api.elsevier.com API endpoint (big change)
-# *** DEV NOTES:
-#   http://dev.elsevier.com/
-#   http://api.elsevier.com/documentation/SCOPUSSearchAPI.wadl
-#   http://api.elsevier.com/content/search/scopus?httpAccept=application/xml&apiKey=xxxxxxxx&query=doi(10.1080/00220272.2014.966152)&suppressNavLinks=true
-# (old):
-#   http://searchapi.scopus.com/documentSearch.url?format=XML&apiKey=xxxxxxxx&search=doi(10.1080/00220272.2014.966152)
 #
 ######################################################################
 #
@@ -179,8 +173,8 @@ sub get_epdata
 	my $xml_parser = $plugin->{session}->xml;
 
 	# Workaround for malformed XML error responses part 1
-	my $status_code   = '';
-	my $status_detail = '';
+	my $status_code   = '-';
+	my $status_detail = '-';
 
 	# End workaround part 1
 	eval {
@@ -191,17 +185,17 @@ sub get_epdata
 	{
 	    # Workaround for malformed XML error responses part 2 --
 	    # parse out the status code and detail using regex's
+	    $plugin->warning( "Received malformed XML error response" );
 	    if( $response->content =~ m/<statusCode[^>]*>([^<]+)<\/statusCode>/g )
 	    {
 		$status_code = $1;
 	    }
-	    if( $status_code eq 'ERROR' )
+	    if( $response->content =~ m/<statusText[^>]*>([^<]+)<\/statusText>/g )
 	    {
-		$plugin->warning( "Received malformed XML error response" );
-		if( $response->content =~ m/<detail[^>]*>([^<]+)<\/detail>/g )    # FIXME: is this <detail/> or <statusText/> ?
-		{
-		    $status_detail = $1;
-		}
+		$status_detail = $1;
+	    }
+	    if( $status_code || $status_detail )
+	    {
 		$plugin->error(
 			      "Scopus responded with error condition for EPrint ID $eprintid: $status_code, " . $status_detail .
 				', Request URL: ' . $quri->as_string );
@@ -215,14 +209,14 @@ sub get_epdata
 	    }
 	};
 
-	$status_code = $plugin->get_response_status_code( $response_xml );
-	if( $status_code ne 'OK' && $status_code ne 'PartOK' )
+	if( $response->code != 200 )
 	{
 	    # Don't die on errors because these may be caused by data
 	    # specific to a given eprint and dying would prevent
 	    # updates for the remaining eprints
-	    $plugin->error( "Scopus responded with error condition for EPrint ID $eprintid: $status_code, " .
-			    $plugin->get_response_status_detail( $response_xml ) . ', Request URL: ' . $quri->as_string );
+	    ( $status_code, $status_detail ) = $plugin->get_response_status( $response_xml );
+	    $plugin->error( "Scopus responded with error condition for EPrint ID $eprintid: $status_code, " . $status_detail .
+			    ', Request URL: ' . $quri->as_string );
 	    next QUERY_METHOD;
 	}
 
@@ -345,25 +339,16 @@ sub _get_querystring_metadata
 }
 
 #
-# Return the content of the status/statusCode element
+# Return the content of the status/statusCode and status/detail elements
+# from an error response
 #
-sub get_response_status_code
+sub get_response_status
 {
     my( $plugin, $response_xml ) = @_;
 
-    # FIXME: successful requests don't have a <status/> anymore
     my $status = $response_xml->documentElement->getChildrenByTagName( 'status' )->[ 0 ];
-    return $status->getChildrenByTagName( 'statusCode' )->[ 0 ]->textContent;
-}
-
-#
-# Return the content of the status/detail element
-#
-sub get_response_status_detail
-{
-    my( $plugin, $response_xml ) = @_;
-    my $status = $response_xml->documentElement->getChildrenByTagName( "status" )->[ 0 ];
-    return $status->getChildrenByTagName( 'detail' )->[ 0 ]->textContent;
+    return ( $status->getChildrenByTagName( 'statusCode' )->[ 0 ]->textContent,
+	     $status->getChildrenByTagName( 'detail' )->[ 0 ]->textContent, );
 }
 
 #
@@ -373,29 +358,24 @@ sub get_number_matches
 {
     my( $plugin, $response_xml ) = @_;
 
-    # FIXME: this is now <opensearch:totalResults/>, a direct descendent of the document element
-    my $result = $response_xml->getElementsByTagName( "scopusSearchResults" )->[ 0 ];
-    return $result->getElementsByTagName( 'totalResults' )->[ 0 ]->textContent;
+    return $response_xml->getElementsByTagName( "opensearch:totalResults" )->[ 0 ]->textContent;
 }
 
 #
 # Convert the response from Scopus into an "epdata" hash.
 #
-# Assumes that this is response returned an OK or PartOK response and
+# Assumes that this is response returned a 200 OK response and
 # there were matches to the query.
+#
 sub response_to_epdata
 {
     my( $plugin, $response_xml ) = @_;
 
-    # FIXME: these are now <entry/> elements directly descended from the document element
-    my $result = shift @{ $response_xml->getElementsByTagName( "scopusSearchResults" ) };
-    my $record = shift @{ $result->getElementsByTagName( "scopusResult" ) };
+    my $record = shift @{ $response_xml->getElementsByTagName( "entry" ) };
 
-    # XXX: this is the same
     my $eid = shift @{ $record->getElementsByTagName( "eid" ) };
 
-    # FIXME: now <citedby-count/>
-    my $citation_count = shift @{ $record->getElementsByTagName( "citedbycount" ) };
+    my $citation_count = shift @{ $record->getElementsByTagName( "citedby-count" ) };
     return { cluster=>$eid->textContent,
 	     impact=>$citation_count->textContent
 	   };
