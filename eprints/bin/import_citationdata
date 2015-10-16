@@ -11,22 +11,22 @@
 ###############################################################################
 #
 # Copyright 2011 Queensland University of Technology. All Rights Reserved.
-# 
+#
 #  This file is part of the Citation Count Dataset and Import Plug-ins for GNU
 #  EPrints 3.
-#  
+#
 #  Copyright (c) 2011 Queensland University of Technology, Queensland, Australia
-#  
+#
 #  The plug-ins are free software; you can redistribute them and/or modify
 #  them under the terms of the GNU General Public License as published by
 #  the Free Software Foundation; either version 2 of the License, or
 #  (at your option) any later version.
-#  
+#
 #  The plug-ins are distributed in the hope that they will be useful,
 #  but WITHOUT ANY WARRANTY; without even the implied warranty of
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
-#  
+#
 #  You should have received a copy of the GNU General Public License
 #  along with EPrints 3; if not, write to the Free Software
 #  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
@@ -118,67 +118,60 @@ use strict;
 use EPrints;
 use EPrints::LogHandler;
 
-
 #
 # Set default parameters
 #
-my $logfile = undef;
-my $net_retry_max = 4;
+my $logfile            = undef;
+my $net_retry_max      = 4;
 my $net_retry_interval = 900;
-my $verbose = 0;
-my $quiet = 0;
-my $help = 0;
-my $man = 0;
-
+my $verbose            = 0;
+my $quiet              = 0;
+my $help               = 0;
+my $man                = 0;
 
 #
 # Parse the command line options
 #
-Getopt::Long::Configure("permute");
-GetOptions( 
-	'log=s' => \$logfile,
-	'net-retry-max=i' => \$net_retry_max,
-	'net-retry-interval=i' => \$net_retry_interval,
-	'help|?' => \$help,
-	'man' => \$man,
-	'verbose+' => \$verbose,
-	'quiet' => \$quiet,
-) || pod2usage( 2 );
-
+Getopt::Long::Configure( "permute" );
+GetOptions( 'log=s'=>\$logfile,
+	    'net-retry-max=i'=>\$net_retry_max,
+	    'net-retry-interval=i'=>\$net_retry_interval,
+	    'help|?'=>\$help,
+	    'man'=>\$man,
+	    'verbose+'=>\$verbose,
+	    'quiet'=>\$quiet,
+	  ) || pod2usage( 2 );
 
 #
 # Print out help screens, if desired
 #
 pod2usage( 1 ) if $help;
-pod2usage( -exitstatus => 0, -verbose => 2 ) if $man;
+pod2usage( -exitstatus=>0, -verbose=>2 ) if $man;
 pod2usage( 2 ) if( scalar @ARGV < 2 || scalar @ARGV > 3 );
-
 
 #
 # Configure verbosity
 #
 my $noise = 1;
-$noise = 0 if( $quiet );
-$noise = 1+$verbose if( $verbose );
+$noise = 0            if( $quiet );
+$noise = 1 + $verbose if( $verbose );
 
 #
 # If we are logging to a file, set the "stderr" flag of the log handler so that
 # errors also go to STDERR. Otherwise, just send them to standard output.
 #
 my $stderr = 0;
-if ( defined $logfile )
+if( defined $logfile )
 {
-	$stderr = 1;
+    $stderr = 1;
 }
-
 
 #
 # Save the remaining arguments
 #
-my $repoid = shift @ARGV;
+my $repoid    = shift @ARGV;
 my $datasetid = shift @ARGV;
-my $filename = shift @ARGV;
-
+my $filename  = shift @ARGV;
 
 #
 # Get an EPrints session and dataset object into which to import data
@@ -186,88 +179,81 @@ my $filename = shift @ARGV;
 my $session = new EPrints::Session( 1, $repoid, $noise );
 if( !defined $session )
 {
-	print STDERR "Failed to load repository: $repoid\n";
-	exit 1;
+    print STDERR "Failed to load repository: $repoid\n";
+    exit 1;
 }
-my $ds = $session->get_repository->get_dataset( $datasetid ) ;
+my $ds = $session->get_repository->get_dataset( $datasetid );
 if( !defined $ds )
 {
-	print STDERR "Unknown Dataset ID: $datasetid\n";
-	$session->terminate;
-	exit 1;
+    print STDERR "Unknown Dataset ID: $datasetid\n";
+    $session->terminate;
+    exit 1;
 }
-
 
 #
 # Create a plug-in for this dataset
 #
 my $pluginmap = $session->config( "datasets", "citation", "pluginmap" );
 my $plugin = undef;
-my $handler = new EPrints::LogHandler(
-	session => $session,
-	logfile => $logfile,
-	prefix => "$repoid $datasetid",
-	stderr => $stderr,
-);
-if ( !defined( $handler  ) )
+my $handler = new EPrints::LogHandler( session=>$session,
+				       logfile=>$logfile,
+				       prefix=>"$repoid $datasetid",
+				       stderr=>$stderr,
+				     );
+if( !defined( $handler ) )
 {
-	print STDERR "Could not open $logfile: $!";
+    print STDERR "Could not open $logfile: $!";
+    $session->terminate();
+    exit 1;
+}
+if( defined( $pluginmap ) && exists( $pluginmap->{$datasetid} ) )
+{
+    $plugin = $session->plugin( $pluginmap->{$datasetid},
+				Handler=>$handler,
+				net_retry=>{ max=>$net_retry_max,
+					     interval=>$net_retry_interval,
+					   },
+			      );
+    if( !defined( $plugin ) )
+    {
+	# the plug-in itself should print an error message
 	$session->terminate();
 	exit 1;
-}
-if ( defined( $pluginmap ) && exists( $pluginmap->{$datasetid} ) )
-{
-	$plugin = $session->plugin(
-		$pluginmap->{$datasetid},
-		Handler => $handler,
-		net_retry => {
-			max => $net_retry_max,
-			interval => $net_retry_interval,
-		},
-	);
-	if ( !defined( $plugin ) )
-	{
-		# the plug-in itself should print an error message
-		$session->terminate();
-		exit 1;
-	}
+    }
 }
 else
 {
-	print STDERR "There is no import plug-in defined for dataset \"" . $datasetid . "\".\n";
-	$session->terminate();
-	exit 1;
+    print STDERR "There is no import plug-in defined for dataset \"" . $datasetid . "\".\n";
+    $session->terminate();
+    exit 1;
 }
 if( $plugin->broken )
 {
-	print STDERR "Plugin " . $pluginmap->{$datasetid} . " could not run because:\n";
-	print STDERR $plugin->error_message."\n";
-	$session->terminate();
-	exit 1;
+    print STDERR "Plugin " . $pluginmap->{$datasetid} . " could not run because:\n";
+    print STDERR $plugin->error_message . "\n";
+    $session->terminate();
+    exit 1;
 }
-
 
 #
 # Go!
 #
 eval {
-if( defined $filename )
-{
-	$plugin->input_file(
-		dataset=>$ds,
-		filename=>$filename,
-	);
-}
-else
-{
-	$plugin->process_eprint_dataset( dataset => $ds );
-}
+    if( defined $filename )
+    {
+	$plugin->input_file( dataset=>$ds,
+			     filename=>$filename,
+			   );
+    }
+    else
+    {
+	$plugin->process_eprint_dataset( dataset=>$ds );
+    }
 };
 if( $@ )
 {
-	$handler->message( "error", $session->make_text( "Unhandled exception in ".$plugin->{id}.": $@" ) );
+    $handler->message( "error", $session->make_text( "Unhandled exception in " . $plugin->{id} . ": $@" ) );
 }
-
 
 #
 # Clean up

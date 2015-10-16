@@ -10,22 +10,22 @@
 ###############################################################################
 #
 # Copyright 2011 Queensland University of Technology. All Rights Reserved.
-# 
+#
 #  This file is part of the Citation Count Dataset and Import Plug-ins for GNU
 #  EPrints 3.
-#  
+#
 #  Copyright (c) 2011 Queensland University of Technology, Queensland, Australia
-#  
+#
 #  The plug-ins are free software; you can redistribute them and/or modify
 #  them under the terms of the GNU General Public License as published by
 #  the Free Software Foundation; either version 2 of the License, or
 #  (at your option) any later version.
-#  
+#
 #  The plug-ins are distributed in the hope that they will be useful,
 #  but WITHOUT ANY WARRANTY; without even the implied warranty of
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
-#  
+#
 #  You should have received a copy of the GNU General Public License
 #  along with EPrints 3; if not, write to the Free Software
 #  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
@@ -144,112 +144,103 @@ use File::Temp;
 use Getopt::Long;
 use Pod::Usage;
 
-
 #
 # Set default parameters
 #
-my $period = "day";
-my $logfile = undef;
-my $net_retry_max = undef;
+my $period             = "day";
+my $logfile            = undef;
+my $net_retry_max      = undef;
 my $net_retry_interval = undef;
-my $verbose = 0;
-my $quiet = 0;
-my $help = 0;
-my $man = 0;
-my $test = 0;
-
+my $verbose            = 0;
+my $quiet              = 0;
+my $help               = 0;
+my $man                = 0;
+my $test               = 0;
 
 #
 # Parse the command line options
 #
-Getopt::Long::Configure("permute");
-GetOptions(
-	'period=s' => \$period,
-	'log=s' => \$logfile,
-	'net-retry-max=i' => \$net_retry_max,
-	'net-retry-interval=i' => \$net_retry_interval,
-	'help|?' => \$help,
-	'man' => \$man,
-	'verbose+' => \$verbose,
-	'quiet' => \$quiet,
-	'test' => \$test,
-) || pod2usage( 2 );
-
+Getopt::Long::Configure( "permute" );
+GetOptions( 'period=s'=>\$period,
+	    'log=s'=>\$logfile,
+	    'net-retry-max=i'=>\$net_retry_max,
+	    'net-retry-interval=i'=>\$net_retry_interval,
+	    'help|?'=>\$help,
+	    'man'=>\$man,
+	    'verbose+'=>\$verbose,
+	    'quiet'=>\$quiet,
+	    'test'=>\$test,
+	  ) || pod2usage( 2 );
 
 #
 # Print out help screens, if desired
 #
 pod2usage( 1 ) if $help;
-pod2usage( -exitstatus => 0, -verbose => 2 ) if $man;
+pod2usage( -exitstatus=>0, -verbose=>2 ) if $man;
 pod2usage( 2 ) if( scalar @ARGV < 2 || scalar @ARGV > 4 );
-
 
 #
 # Configure verbosity
 #
 my $noise = 1;
-$noise = 0 if( $quiet );
-$noise = 1+$verbose if( $verbose );
-
+$noise = 0            if( $quiet );
+$noise = 1 + $verbose if( $verbose );
 
 #
 # Save the remaining arguments
 #
-my $repoid = shift @ARGV;
-my $datasetid = shift @ARGV;
-my $other_date = ( scalar @ARGV > 0 )? shift @ARGV : undef;
-my $other_hour = ( scalar @ARGV > 0 )? shift @ARGV : undef;
-
+my $repoid     = shift @ARGV;
+my $datasetid  = shift @ARGV;
+my $other_date = ( scalar @ARGV > 0 ) ? shift @ARGV : undef;
+my $other_hour = ( scalar @ARGV > 0 ) ? shift @ARGV : undef;
 
 #
 # Check that the period argument is usable
 #
-if ( $period ne "day" && $period ne "hour" && $period ne "all" )
+if( $period ne "day" && $period ne "hour" && $period ne "all" )
 {
-	print STDERR "The period must be \"day\", \"hour\" or \"all\".\n";
-	exit 1;
+    print STDERR "The period must be \"day\", \"hour\" or \"all\".\n";
+    exit 1;
 }
-
 
 #
 # Work out the date for which we are doing the update
 #
-my ( $update_year, $update_month, $update_day, $update_hour, $update_minute, $update_second ) = Date::Calc::Today_and_Now();
-if ( $other_date )
+my( $update_year, $update_month, $update_day, $update_hour, $update_minute, $update_second ) = Date::Calc::Today_and_Now();
+if( $other_date )
 {
-	my @a = Date::Calc::Decode_Date_EU( $other_date );
-	if ( @a )
-	{
-		$update_year = $a[0];
-		$update_month = $a[1];
-		$update_day = $a[2];
-	}
-	else
-	{
-		print STDERR "Invalid date: $other_date\n";
-		exit 1;
-	}
+    my @a = Date::Calc::Decode_Date_EU( $other_date );
+    if( @a )
+    {
+	$update_year  = $a[ 0 ];
+	$update_month = $a[ 1 ];
+	$update_day   = $a[ 2 ];
+    }
+    else
+    {
+	print STDERR "Invalid date: $other_date\n";
+	exit 1;
+    }
 }
-if ( $other_hour )
+if( $other_hour )
 {
-	if ( !( $other_hour =~ /^\d+$/ ) || $other_hour > 23 )
-	{
-		print STDERR "The hour must be between 0 and 23\n";
-		exit 1;
-	}
-	$update_hour = $other_hour;
+    if( !( $other_hour =~ /^\d+$/ ) || $other_hour > 23 )
+    {
+	print STDERR "The hour must be between 0 and 23\n";
+	exit 1;
+    }
+    $update_hour = $other_hour;
 }
-
 
 #
 # Convert the update date to GMT since EPrints functions return GMT
 #
-my ( $delta_year, $delta_month, $delta_day, $delta_hour, $delta_minute, $delta_second, $dst ) = Date::Calc::Timezone();
-( $update_year, $update_month, $update_day, $update_hour, $update_minute, $update_second ) = Date::Calc::Add_Delta_YMDHMS(
-		$update_year, $update_month, $update_day, $update_hour, $update_minute, $update_second,
-		-$delta_year, -$delta_month, -$delta_day, -$delta_hour, -$delta_minute, -$delta_second,
-	);
-
+my( $delta_year, $delta_month, $delta_day, $delta_hour, $delta_minute, $delta_second, $dst ) = Date::Calc::Timezone();
+( $update_year, $update_month, $update_day, $update_hour, $update_minute, $update_second ) =
+  Date::Calc::Add_Delta_YMDHMS( $update_year,   $update_month,  $update_day,    $update_hour,
+				$update_minute, $update_second, -$delta_year,   -$delta_month,
+				-$delta_day,    -$delta_hour,   -$delta_minute, -$delta_second,
+			      );
 
 #
 # Get an EPrints session and the live dataset
@@ -257,145 +248,143 @@ my ( $delta_year, $delta_month, $delta_day, $delta_hour, $delta_minute, $delta_s
 my $session = new EPrints::Session( 1, $repoid, $noise );
 if( !defined $session )
 {
-	print STDERR "Failed to load repository: $repoid\n";
-	exit 1;
+    print STDERR "Failed to load repository: $repoid\n";
+    exit 1;
 }
-my $eprintds = $session->get_repository->get_dataset( "archive" ) ;
+my $eprintds = $session->get_repository->get_dataset( "archive" );
 if( !defined $eprintds )
 {
-	print STDERR "Could not access the live archive!\n";
-	$session->terminate;
-	exit 1;
+    print STDERR "Could not access the live archive!\n";
+    $session->terminate;
+    exit 1;
 }
 
-
-if ( $test )
+if( $test )
 {
-	# perform testing then exit
-	my $rc = test_eprint_selection_algorithm( $session, $eprintds, $update_year, $update_month, $period );
-	$session->terminate;
-	exit $rc;
+    # perform testing then exit
+    my $rc = test_eprint_selection_algorithm( $session, $eprintds, $update_year, $update_month, $period );
+    $session->terminate;
+    exit $rc;
 }
-
 
 #
 # Open the log file
 #
 my $logfh;
-if ( defined $logfile )
+if( defined $logfile )
 {
-	if ( !open( $logfh, ">>:utf8", $logfile ) )
-	{
-		print STDERR "Could not open $logfile: $!\n";
-		$session->terminate;
-		exit 1;
-	}
-	print { $logfh } "\n-- " . EPrints::Time::human_time();
-	print { $logfh } " update_citationdata $repoid $datasetid --\n";
+    if( !open( $logfh, ">>:utf8", $logfile ) )
+    {
+	print STDERR "Could not open $logfile: $!\n";
+	$session->terminate;
+	exit 1;
+    }
+    print {$logfh} "\n-- " . EPrints::Time::human_time();
+    print {$logfh} " update_citationdata $repoid $datasetid --\n";
 }
 else
 {
-	open( $logfh, ">-:utf8" );
+    open( $logfh, ">-:utf8" );
 }
-
 
 #
 # Build the list of eprintids to be updated
 #
 my @ids;
-if ( $period eq "day" )
+if( $period eq "day" )
 {
-	# get the IDs of all of the eprints due for updating today
-	@ids = get_eprintids_for_day( $session, $eprintds, $update_year, $update_month, $update_day );
+    # get the IDs of all of the eprints due for updating today
+    @ids = get_eprintids_for_day( $session, $eprintds, $update_year, $update_month, $update_day );
 
-	# save the last index of the array for later
-	my $cutoff =  ( scalar @ids ) - 1;
+    # save the last index of the array for later
+    my $cutoff = ( scalar @ids ) - 1;
 
-	# add the IDs of all the eprints deposited yesterday
-	my @ids_extra = get_eprintids_for_yesterday( $session, $eprintds, $update_year, $update_month, $update_day );
-	if ( scalar @ids_extra > 0 )
+    # add the IDs of all the eprints deposited yesterday
+    my @ids_extra = get_eprintids_for_yesterday( $session, $eprintds, $update_year, $update_month, $update_day );
+    if( scalar @ids_extra > 0 )
+    {
+	push @ids, @ids_extra;
+    }
+
+    # output the eprint IDs to the log
+    if( $noise > 0 )
+    {
+	print {$logfh} "Running update for " . Date::Calc::Date_to_Text( $update_year, $update_month, $update_day ) . " UTC.\n";
+	if( scalar @ids > 0 )
 	{
-		push @ids, @ids_extra;
+	    print {$logfh} "Scheduled EPrints: " . $ids[ 0 ] . " to " . $ids[ $cutoff ] . "\n";
+	    if( scalar @ids > $cutoff + 1 )
+	    {
+		print {$logfh} "New EPrints:";
+		for( my $i = $cutoff + 1 ; $i < scalar @ids ; $i++ )
+		{
+		    print {$logfh} " " . $ids[ $i ];
+		}
+		print {$logfh} "\n";
+	    }
 	}
-
-	# output the eprint IDs to the log
-	if ( $noise > 0 )
+	else
 	{
-		print { $logfh } "Running update for " . Date::Calc::Date_to_Text( $update_year, $update_month, $update_day ) . " UTC.\n";
-		if ( scalar @ids > 0 )
-		{
-			print { $logfh } "Scheduled EPrints: " . $ids[0] . " to " . $ids[$cutoff] . "\n";
-			if ( scalar @ids > $cutoff + 1 )
-			{
-				print { $logfh } "New EPrints:";
-				for ( my $i = $cutoff + 1; $i < scalar @ids; $i++ )
-				{
-					print { $logfh } " ". $ids[$i];
-				}
-				print { $logfh } "\n";
-			}
-		}
-		else
-		{
-			print { $logfh } "No EPrints scheduled.\n";
-		}
+	    print {$logfh} "No EPrints scheduled.\n";
 	}
+    }
 }
-elsif ( $period eq "hour" )
+elsif( $period eq "hour" )
 {
-	# get the IDs for all of the eprints due for updating this hour
-	@ids = get_eprintids_for_hour( $session, $eprintds, $update_year, $update_month, $update_day, $update_hour );
+    # get the IDs for all of the eprints due for updating this hour
+    @ids = get_eprintids_for_hour( $session, $eprintds, $update_year, $update_month, $update_day, $update_hour );
 
-	# save the last index of the array for later
-	my $cutoff =  ( scalar @ids ) - 1;
+    # save the last index of the array for later
+    my $cutoff = ( scalar @ids ) - 1;
 
-	# add the IDs of all the eprints deposited in the last hour
-	my @ids_extra = get_eprintids_for_last_hour( $session, $eprintds, $update_year, $update_month, $update_day, $update_hour );
-	if ( scalar @ids_extra > 0 )
+    # add the IDs of all the eprints deposited in the last hour
+    my @ids_extra = get_eprintids_for_last_hour( $session, $eprintds, $update_year, $update_month, $update_day, $update_hour );
+    if( scalar @ids_extra > 0 )
+    {
+	push @ids, @ids_extra;
+    }
+
+    # output the eprint IDs to the log
+    if( $noise > 0 )
+    {
+	print {$logfh} "Running update for " . Date::Calc::Date_to_Text( $update_year, $update_month, $update_day ) .
+	  " $update_hour:00:00 UTC.\n";
+	if( scalar @ids > 0 )
 	{
-		push @ids, @ids_extra;
+	    print {$logfh} "Scheduled EPrints: " . $ids[ 0 ] . " to " . $ids[ $cutoff ] . "\n";
+	    if( scalar @ids > $cutoff + 1 )
+	    {
+		print {$logfh} "New EPrints:";
+		for( my $i = $cutoff + 1 ; $i < scalar @ids ; $i++ )
+		{
+		    print {$logfh} " " . $ids[ $i ];
+		}
+		print {$logfh} "\n";
+	    }
 	}
-
-	# output the eprint IDs to the log
-	if ( $noise > 0 )
+	else
 	{
-		print { $logfh } "Running update for " . Date::Calc::Date_to_Text( $update_year, $update_month, $update_day ) . " $update_hour:00:00 UTC.\n";
-		if ( scalar @ids > 0 )
-		{
-			print { $logfh } "Scheduled EPrints: " . $ids[0] . " to " . $ids[$cutoff] . "\n";
-			if ( scalar @ids > $cutoff + 1 )
-			{
-				print { $logfh } "New EPrints:";
-				for (my $i = $cutoff + 1; $i < scalar @ids; $i++ )
-				{
-					print { $logfh } " " . $ids[$i];
-				}
-				print { $logfh} "\n";
-			}
-		}
-		else
-		{
-			print { $logfh } "No EPrints scheduled.\n";
-		}
+	    print {$logfh} "No EPrints scheduled.\n";
 	}
+    }
 }
-elsif ( $period eq "all" )
+elsif( $period eq "all" )
 {
-	# get all eprint ids
-	@ids = get_all_eprintids( $session, $eprintds );
+    # get all eprint ids
+    @ids = get_all_eprintids( $session, $eprintds );
 
-	# output the eprint IDs to the log
-	if ( $noise > 0 )
+    # output the eprint IDs to the log
+    if( $noise > 0 )
+    {
+	if( scalar @ids > 0 )
 	{
-		if ( scalar @ids > 0 )
-		{
-			print { $logfh } "Updating all EPrints (" . $ids[0] . " to " . $ids[(scalar @ids) - 1] . ").\n";
-		}
-		else
-		{
-			print { $logfh } "There are no EPrints in the live archive.\n";
-		}
+	    print {$logfh} "Updating all EPrints (" . $ids[ 0 ] . " to " . $ids[ ( scalar @ids ) - 1 ] . ").\n";
 	}
+	else
+	{
+	    print {$logfh} "There are no EPrints in the live archive.\n";
+	}
+    }
 }
 
 # clean up our stuff before handing over to import_citationdata
@@ -403,11 +392,10 @@ $session->terminate;
 close( $logfh );
 
 # stop now if there are no eprints to be updated
-if ( scalar @ids == 0 )
+if( scalar @ids == 0 )
 {
-	exit 0;
+    exit 0;
 }
-
 
 #
 # Create a temporary file containing the eprint IDs to be updated
@@ -415,219 +403,210 @@ if ( scalar @ids == 0 )
 my $tmp = File::Temp->new();
 foreach my $id ( @ids )
 {
-	print $tmp "$id\n";
+    print $tmp "$id\n";
 }
-
 
 #
 # Use import_citationdata to perform the actual import
 #
 my @args = ( $EPrints::SystemSettings::conf->{"base_path"} . "/bin/import_citationdata" );
 push @args, $repoid;
-if ( defined $logfile )
+if( defined $logfile )
 {
-	push @args, "--log", $logfile;
+    push @args, "--log", $logfile;
 }
-if ( defined $net_retry_max )
+if( defined $net_retry_max )
 {
-	push @args, "--net-retry-max", $net_retry_max;
+    push @args, "--net-retry-max", $net_retry_max;
 }
-if ( defined $net_retry_interval )
+if( defined $net_retry_interval )
 {
-	push @args, "--net-retry-interval", $net_retry_interval;
+    push @args, "--net-retry-interval", $net_retry_interval;
 }
-if ( $noise == 0 )
+if( $noise == 0 )
 {
-	push @args, "--quiet";
+    push @args, "--quiet";
 }
-if ( $noise > 1 )
+if( $noise > 1 )
 {
-	for (my $i = 1; $i < $noise; $i++)
-	{
-		push @args, "--verbose";
-	}
+    for( my $i = 1 ; $i < $noise ; $i++ )
+    {
+	push @args, "--verbose";
+    }
 }
 push @args, $datasetid;
 push @args, $tmp->filename;
-system(  @args );
-if ( $? == -1 )
+system( @args );
+if( $? == -1 )
 {
-	print STDERR "Could not execute " . $args[0] . ": $!\n";
-	exit 1;
+    print STDERR "Could not execute " . $args[ 0 ] . ": $!\n";
+    exit 1;
 }
 
 # return the same value as import_citationdata
 exit $?;
-
 
 #
 # Get an array of eprint IDs that are due for updates today
 #
 sub get_eprintids_for_day
 {
-	my ( $session, $dataset, $year, $month, $day ) = @_;
+    my( $session, $dataset, $year, $month, $day ) = @_;
 
-	# get all of the eprints to the end of the previous month
-	my $list = get_eprints_before_month( $session, $dataset, $year, $month);
+    # get all of the eprints to the end of the previous month
+    my $list = get_eprints_before_month( $session, $dataset, $year, $month );
 
-	# work which eprints are due for update today
-	my $n = $list->count;
-	my $d = Date::Calc::Days_in_Month( $year, $month );
-	my $index_start = ( ( $day - 1 ) * $n ) / $d;
-	my $index_end = ( $day * $n ) / $d - 1;
-	my $index_count = ( $index_end >= $index_start )? $index_end - $index_start + 1 : 1;
-	my @ids = @{$list->ids( $index_start, $index_count )};
+    # work which eprints are due for update today
+    my $n           = $list->count;
+    my $d           = Date::Calc::Days_in_Month( $year, $month );
+    my $index_start = ( ( $day - 1 ) * $n ) / $d;
+    my $index_end   = ( $day * $n ) / $d - 1;
+    my $index_count = ( $index_end >= $index_start ) ? $index_end - $index_start + 1 : 1;
+    my @ids         = @{ $list->ids( $index_start, $index_count ) };
 
-	# clean up
-	$list->dispose;
+    # clean up
+    $list->dispose;
 
-	return @ids;
+    return @ids;
 }
-
 
 #
 # Get an array of eprint IDs that are due for updates this hour
 #
 sub get_eprintids_for_hour
 {
-	my ( $session, $dataset, $year, $month, $day, $hour ) = @_;
+    my( $session, $dataset, $year, $month, $day, $hour ) = @_;
 
-	# get all of the eprints to the end of the previous month
-	my $list = get_eprints_before_month( $session, $dataset, $year, $month);
+    # get all of the eprints to the end of the previous month
+    my $list = get_eprints_before_month( $session, $dataset, $year, $month );
 
-	# work out which eprints are due for update today
-	my $n = $list->count;
-	my $h = Date::Calc::Days_in_Month( $year, $month ) * 24;
-	my $hour_count = ( $day - 1 ) * 24 + $hour;
-	my $index_start = ( $hour_count * $n ) / $h;
-	my $index_end = ( ( $hour_count + 1 ) * $n ) / $h - 1;
-	my $index_count = ( $index_end >= $index_start )? $index_end - $index_start + 1 : 1;
-	my @ids = @{$list->ids( $index_start, $index_count )};
+    # work out which eprints are due for update today
+    my $n           = $list->count;
+    my $h           = Date::Calc::Days_in_Month( $year, $month ) * 24;
+    my $hour_count  = ( $day - 1 ) * 24 + $hour;
+    my $index_start = ( $hour_count * $n ) / $h;
+    my $index_end   = ( ( $hour_count + 1 ) * $n ) / $h - 1;
+    my $index_count = ( $index_end >= $index_start ) ? $index_end - $index_start + 1 : 1;
+    my @ids         = @{ $list->ids( $index_start, $index_count ) };
 
-	# clean up
-	$list->dispose;
+    # clean up
+    $list->dispose;
 
-	return @ids;
+    return @ids;
 }
-
 
 #
 # Get an array of eprint IDs that were deposited yesterday
 #
 sub get_eprintids_for_yesterday
 {
-	my ( $session, $dataset, $year, $month, $day ) = @_;
+    my( $session, $dataset, $year, $month, $day ) = @_;
 
-	# get yesterday's date
-	my ( $yesterday_year, $yesterday_month, $yesterday_day ) = Date::Calc::Add_Delta_Days( $year, $month, $day, -1 );
+    # get yesterday's date
+    my( $yesterday_year, $yesterday_month, $yesterday_day ) = Date::Calc::Add_Delta_Days( $year, $month, $day, -1 );
 
-	# find all of the eprints added yesterday
-	my $searchexp = EPrints::Search->new(
-		session => $session,
-		dataset => $dataset,
-		custom_order => "eprintid",
-	);
-	$searchexp->add_field( $eprintds->get_field( "datestamp" ), sprintf( "%04d-%02d-%02d", $yesterday_year, $yesterday_month, $yesterday_day ) );
-	my $list = $searchexp->perform_search;
-	my @ids = @{$list->ids};
+    # find all of the eprints added yesterday
+    my $searchexp = EPrints::Search->new( session=>$session,
+					  dataset=>$dataset,
+					  custom_order=>"eprintid",
+					);
+    $searchexp->add_field( $eprintds->get_field( "datestamp" ),
+			   sprintf( "%04d-%02d-%02d", $yesterday_year, $yesterday_month, $yesterday_day ) );
+    my $list = $searchexp->perform_search;
+    my @ids  = @{ $list->ids };
 
-	# clean up
-	$list->dispose;
+    # clean up
+    $list->dispose;
 
-	return @ids;
+    return @ids;
 }
-
 
 #
 # Get an array of eprnt IDs that were deposited in the past hour.
 #
 sub get_eprintids_for_last_hour
 {
-	my ( $session, $dataset, $year, $month, $day, $hour ) = @_;
+    my( $session, $dataset, $year, $month, $day, $hour ) = @_;
 
-	# calculate the start of the "yesterhour"
-	my $yesterhour_year = $year;
-	my $yesterhour_month = $month;
-	my $yesterhour_day = $day;
-	my $yesterhour_hour = $hour - 1;
-	if ( $yesterhour_hour < 0 )
-	{
-		( $yesterhour_year, $yesterhour_month, $yesterhour_day ) = Date::Calc::Add_Delta_Days( $year, $month, $day, -1 );
-	}
+    # calculate the start of the "yesterhour"
+    my $yesterhour_year  = $year;
+    my $yesterhour_month = $month;
+    my $yesterhour_day   = $day;
+    my $yesterhour_hour  = $hour - 1;
+    if( $yesterhour_hour < 0 )
+    {
+	( $yesterhour_year, $yesterhour_month, $yesterhour_day ) = Date::Calc::Add_Delta_Days( $year, $month, $day, -1 );
+    }
 
-	# find all of the eprints deposited on the day of the yesterhour
-	my $searchexp = EPrints::Search->new(
-		session => $session,
-		dataset => $dataset,
-		custom_order => "eprintid",
-	);
-	$searchexp->add_field( $eprintds->get_field( "datestamp" ), sprintf( "%04d-%02d-%02d", $yesterhour_year, $yesterhour_month, $yesterhour_day ) );
-	my $list = $searchexp->perform_search;
+    # find all of the eprints deposited on the day of the yesterhour
+    my $searchexp = EPrints::Search->new( session=>$session,
+					  dataset=>$dataset,
+					  custom_order=>"eprintid",
+					);
+    $searchexp->add_field( $eprintds->get_field( "datestamp" ),
+			   sprintf( "%04d-%02d-%02d", $yesterhour_year, $yesterhour_month, $yesterhour_day ) );
+    my $list = $searchexp->perform_search;
 
-	# build an array of the eprints deposited in the last hour
-	my @ids;
-	my $info = { ids => \@ids, hour => $yesterhour_hour };
-	$list->map(
-		sub {
-			my ( $session, $dataset, $eprint, $info ) = @_;
+    # build an array of the eprints deposited in the last hour
+    my @ids;
+    my $info = { ids=>\@ids, hour=>$yesterhour_hour };
+    $list->map(
+	sub {
+	    my( $session, $dataset, $eprint, $info ) = @_;
 
-			if ( $eprint->get_value( "datestamp" ) =~ /^\d+-\d+-\d+\s+(\d+):/ )
-			{
-				if ( $1 == $info->{hour} )
-				{
-					push @{$info->{ids}}, $eprint->get_id;
-				}
-			}
-		},
-		$info
-	);
+	    if( $eprint->get_value( "datestamp" ) =~ /^\d+-\d+-\d+\s+(\d+):/ )
+	    {
+		if( $1 == $info->{hour} )
+		{
+		    push @{ $info->{ids} }, $eprint->get_id;
+		}
+	    }
+	},
+	$info
+	      );
 
-	# clean up
-	$list->dispose;
+    # clean up
+    $list->dispose;
 
-	return @ids;
+    return @ids;
 }
-
 
 #
 # Get an array of IDs of every eprint in the archive.
 #
 sub get_all_eprintids
 {
-        my ( $session, $dataset ) = @_;
+    my( $session, $dataset ) = @_;
 
-        return @{$dataset->search()->reorder( 'eprintid' )->ids};
+    return @{ $dataset->search()->reorder( 'eprintid' )->ids };
 }
-
-
 
 #
 # Get a list of all eprints that existed at the beginning of the month.
 #
 sub get_eprints_before_month
 {
-	my ( $session, $dataset, $year, $month ) = @_;
+    my( $session, $dataset, $year, $month ) = @_;
 
-	# work out the last day of the previous month
-	my $last_month = $month - 1;
-	my $last_year = $year;
-	if ( $last_month == 0)
-	{
-		$last_year--;
-		$last_month = 12;
-	}
-	my $last_day = Date::Calc::Days_in_Month( $last_year, $last_month );
+    # work out the last day of the previous month
+    my $last_month = $month - 1;
+    my $last_year  = $year;
+    if( $last_month == 0 )
+    {
+	$last_year--;
+	$last_month = 12;
+    }
+    my $last_day = Date::Calc::Days_in_Month( $last_year, $last_month );
 
-	# get the eprints
-	my $searchexp = EPrints::Search->new(
-		session => $session,
-		dataset => $dataset,
-		custom_order => "eprintid",
-	);
-	$searchexp->add_field( $eprintds->get_field( "datestamp" ), sprintf( "-%04d-%02d-%02d", $last_year, $last_month, $last_day ) );
-	return $searchexp->perform_search;
+    # get the eprints
+    my $searchexp = EPrints::Search->new( session=>$session,
+					  dataset=>$dataset,
+					  custom_order=>"eprintid",
+					);
+    $searchexp->add_field( $eprintds->get_field( "datestamp" ),
+			   sprintf( "-%04d-%02d-%02d", $last_year, $last_month, $last_day ) );
+    return $searchexp->perform_search;
 }
-
 
 #
 # Perform unit testing on the eprint selection algorithms. This function
@@ -637,92 +616,93 @@ sub get_eprints_before_month
 #
 sub test_eprint_selection_algorithm
 {
-	my ( $session, $dataset, $test_year, $test_month, $period ) = @_;
+    my( $session, $dataset, $test_year, $test_month, $period ) = @_;
 
-	# get a list of all eprint IDs in the dataset
-	my $searchexp = EPrints::Search->new(
-		session => $session,
-		dataset => $dataset,
-		custom_order => "eprintid",
-	);
-	my $list = $searchexp->perform_search;
-	my @ids_all = @{$list->ids( 0, $list->count )};
-	$list->dispose;
+    # get a list of all eprint IDs in the dataset
+    my $searchexp = EPrints::Search->new( session=>$session,
+					  dataset=>$dataset,
+					  custom_order=>"eprintid",
+					);
+    my $list = $searchexp->perform_search;
+    my @ids_all = @{ $list->ids( 0, $list->count ) };
+    $list->dispose;
 
-
-	# build a list of the eprints to be updated, and sort into ascending order	
-	my @ids_update = ();
-	my $d = Date::Calc::Days_in_Month( $test_year, $test_month );
-	if ( $period eq "day" )
+    # build a list of the eprints to be updated, and sort into ascending order
+    my @ids_update = ();
+    my $d = Date::Calc::Days_in_Month( $test_year, $test_month );
+    if( $period eq "day" )
+    {
+	# get the eprint IDs for every day
+	for( my $test_day = 1 ; $test_day <= $d ; $test_day++ )
 	{
-		# get the eprint IDs for every day
-		for ( my $test_day = 1; $test_day <= $d; $test_day++ )
-		{
-			push @ids_update, get_eprintids_for_day( $session, $dataset, $test_year, $test_month, $test_day );
-			if ( $test_day > 1 )
-			{
-				push @ids_update, get_eprintids_for_yesterday( $session, $dataset, $test_year, $test_month, $test_day );
-			}
-		}
+	    push @ids_update, get_eprintids_for_day( $session, $dataset, $test_year, $test_month, $test_day );
+	    if( $test_day > 1 )
+	    {
+		push @ids_update, get_eprintids_for_yesterday( $session, $dataset, $test_year, $test_month, $test_day );
+	    }
+	}
 
-		# add the eprints that were added on the last day of the month
-		if ( $test_month == 12)
-		{
-			push @ids_update, get_eprintids_for_yesterday( $session, $dataset, $test_year + 1, 1, 1 );
-		}
-		else
-		{
-			push @ids_update, get_eprintids_for_yesterday( $session, $dataset, $test_year, $test_month + 1 );
-		}
-
+	# add the eprints that were added on the last day of the month
+	if( $test_month == 12 )
+	{
+	    push @ids_update, get_eprintids_for_yesterday( $session, $dataset, $test_year + 1, 1, 1 );
 	}
 	else
 	{
-		# get the eprint IDs for every hour
-		for ( my $test_day = 1; $test_day <= $d; $test_day++ )
-		{
-			for ( my $test_hour = 0; $test_hour < 24; $test_hour++ )
-			{
-				push @ids_update, get_eprintids_for_hour( $session, $dataset, $test_year, $test_month, $test_day, $test_hour );
-				if ( $test_day > 1 || $test_hour > 0 )
-				{
-					push @ids_update, get_eprintids_for_last_hour( $session, $dataset, $test_year, $test_month, $test_day, $test_hour );
-				}
-			}
-		}
-		
+	    push @ids_update, get_eprintids_for_yesterday( $session, $dataset, $test_year, $test_month + 1 );
 	}
-	my @ids_sorted = sort { $a <=> $b } @ids_update;
 
-	# compare the two lists
-	my $n_all = scalar @ids_all;
-	my $n_update = scalar @ids_sorted;
-	my $i = 0;
-	print "Update\tAll\n" if $session->{noise} > 1;
-	while ( $i < $n_all && $i < $n_update && $ids_sorted[$i] == $ids_all[$i] )
+    }
+    else
+    {
+	# get the eprint IDs for every hour
+	for( my $test_day = 1 ; $test_day <= $d ; $test_day++ )
 	{
-		print $ids_sorted[$i] . "\t" . $ids_all[$i] ."\n" if $session->{noise} > 1;
-		$i++;
+	    for( my $test_hour = 0 ; $test_hour < 24 ; $test_hour++ )
+	    {
+		push @ids_update, get_eprintids_for_hour( $session, $dataset, $test_year, $test_month, $test_day, $test_hour );
+		if( $test_day > 1 || $test_hour > 0 )
+		{
+		    push @ids_update,
+		      get_eprintids_for_last_hour( $session, $dataset, $test_year, $test_month, $test_day, $test_hour );
+		}
+	    }
 	}
-	if ( $i == $n_all && $n_all == $n_update )
-	{
-		print "Test successful.\n" if $session->{noise} > 0;
-		return 0;
-	}
-	elsif ( $i == $n_all && $n_all != $n_update )
-	{
-		print "The update list ($n_update elements) continues beyond the end of the live IDs ($n_all elements)." if $session->{noise} > 0;
-		return 1;
-	}
-	elsif ( $i == $n_update && $n_all != $n_update )
-	{
-		print "The update list ($n_update elements) does not contain all of the live IDs ($n_all elements)." if $session->{noise} > 0;
-		return 1;
-	}
-	else
-	{
-		print $ids_sorted[$i] . "\t" . $ids_all[$i] . "\n" if $session->{noise} > 1;
-		print "Test failed at position $i.\n" if $session->{noise} > 0;
-		return 1;
-	}
+
+    }
+    my @ids_sorted = sort { $a <=> $b } @ids_update;
+
+    # compare the two lists
+    my $n_all    = scalar @ids_all;
+    my $n_update = scalar @ids_sorted;
+    my $i        = 0;
+    print "Update\tAll\n" if $session->{noise} > 1;
+    while( $i < $n_all && $i < $n_update && $ids_sorted[ $i ] == $ids_all[ $i ] )
+    {
+	print $ids_sorted[ $i ] . "\t" . $ids_all[ $i ] . "\n" if $session->{noise} > 1;
+	$i++;
+    }
+    if( $i == $n_all && $n_all == $n_update )
+    {
+	print "Test successful.\n" if $session->{noise} > 0;
+	return 0;
+    }
+    elsif( $i == $n_all && $n_all != $n_update )
+    {
+	print "The update list ($n_update elements) continues beyond the end of the live IDs ($n_all elements)."
+	  if $session->{noise} > 0;
+	return 1;
+    }
+    elsif( $i == $n_update && $n_all != $n_update )
+    {
+	print "The update list ($n_update elements) does not contain all of the live IDs ($n_all elements)."
+	  if $session->{noise} > 0;
+	return 1;
+    }
+    else
+    {
+	print $ids_sorted[ $i ] . "\t" . $ids_all[ $i ] . "\n" if $session->{noise} > 1;
+	print "Test failed at position $i.\n" if $session->{noise} > 0;
+	return 1;
+    }
 }

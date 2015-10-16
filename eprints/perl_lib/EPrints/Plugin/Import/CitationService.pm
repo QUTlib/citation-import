@@ -20,22 +20,22 @@ package EPrints::Plugin::Import::CitationService;
 ###############################################################################
 #
 # Copyright 2011 Queensland University of Technology. All Rights Reserved.
-# 
+#
 #  This file is part of the Citation Count Dataset and Import Plug-ins for GNU
 #  EPrints 3.
-#  
+#
 #  Copyright (c) 2011 Queensland University of Technology, Queensland, Australia
-#  
+#
 #  The plug-ins are free software; you can redistribute them and/or modify
 #  them under the terms of the GNU General Public License as published by
 #  the Free Software Foundation; either version 2 of the License, or
 #  (at your option) any later version.
-#  
+#
 #  The plug-ins are distributed in the hope that they will be useful,
 #  but WITHOUT ANY WARRANTY; without even the implied warranty of
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
-#  
+#
 #  You should have received a copy of the GNU General Public License
 #  along with EPrints 3; if not, write to the Free Software
 #  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
@@ -66,69 +66,69 @@ $EPrints::Plugin::Import::CitationService::DISABLE = 1;
 #
 sub new
 {
-	my( $class, %params ) = @_;
+    my( $class, %params ) = @_;
 
-	my $self = $class->SUPER::new( %params );
+    my $self = $class->SUPER::new( %params );
 
-	# set some parameters that are common to all sub-classes
-	$self->{produce} = [ 'list/citation', 'dataobj/citation' ];
-	$self->{visible} = "api";
+    # set some parameters that are common to all sub-classes
+    $self->{produce} = [ 'list/citation', 'dataobj/citation' ];
+    $self->{visible} = "api";
 
-	return $self;
+    return $self;
 }
-
 
 #
 # Retrieve citation data for a list of eprint ids in a text file
 #
 sub input_text_fh
 {
-	my( $plugin, %opts ) = @_;
+    my( $plugin, %opts ) = @_;
 
-	my @eprintids;
+    my @eprintids;
 
-	my $fh = $opts{fh};
-	
-	while( my $line = <$fh> )
-	{
-		next if ( !( $line =~ /^(\d+)/ ) );
-		push @eprintids, $1;
-	}
+    my $fh = $opts{fh};
 
-	$opts{eprintids} = \@eprintids;
-	my $ids = $plugin->process_eprints( %opts ) || [];
+    while( my $line = <$fh> )
+    {
+	next if( !( $line =~ /^(\d+)/ ) );
+	push @eprintids, $1;
+    }
 
-	# clean up
-	$plugin->dispose;
+    $opts{eprintids} = \@eprintids;
+    my $ids = $plugin->process_eprints( %opts ) || [];
 
-	return EPrints::List->new( 
-		dataset => $opts{dataset}, 
-		session => $plugin->{session},
-		ids => $ids );
+    # clean up
+    $plugin->dispose;
+
+    return
+      EPrints::List->new( dataset=>$opts{dataset},
+			  session=>$plugin->{session},
+			  ids=>$ids
+			);
 }
-
 
 #
 # Retrieve citation counts for all eprints in the live archive.
 #
 sub process_eprint_dataset
 {
-	my( $plugin, %opts ) = @_;
+    my( $plugin, %opts ) = @_;
 
-	my $list = $plugin->{session}->dataset( 'archive' )->search();
-	my @eprintids = @{ $list->ids || [] };
+    my $list = $plugin->{session}->dataset( 'archive' )->search();
+    my @eprintids = @{ $list->ids || [] };
 
-	$opts{eprintids} = \@eprintids;
+    $opts{eprintids} = \@eprintids;
 
-	my $ids = $plugin->process_eprints( %opts ) || [];
-	
-	# clean up
-	$plugin->dispose;
+    my $ids = $plugin->process_eprints( %opts ) || [];
 
-	return EPrints::List->new( 
-		dataset => $opts{dataset}, 
-		session => $plugin->{session},
-		ids => $ids );
+    # clean up
+    $plugin->dispose;
+
+    return
+      EPrints::List->new( dataset=>$opts{dataset},
+			  session=>$plugin->{session},
+			  ids=>$ids
+			);
 
 }
 
@@ -147,56 +147,55 @@ sub process_eprints
     my @ids;
 
     # Iterate through each eprint in $eprintids
-  EPRINT: foreach my $eprintid ( @{$eprintids || []} )
+  EPRINT: foreach my $eprintid ( @{ $eprintids || [] } )
     {
-        #print STDERR "eprintid: $eprintid \n";
-        my $eprint = $plugin->{session}->eprint( $eprintid );
-        if ( defined( $eprint ) )
-        {
-            next if !$plugin->can_process( $eprint );
+	#print STDERR "eprintid: $eprintid \n";
+	my $eprint = $plugin->{session}->eprint( $eprintid );
+	if( defined( $eprint ) )
+	{
+	    next if !$plugin->can_process( $eprint );
 
-            my $citedata;
-            eval
-            {
-                $citedata = $plugin->get_epdata( $eprint );
-                1;
-            } or do
-            {
-                # Give up if get_epdata() fails and doesn't handle
-                # the exception
-                $plugin->error( "Error importing cites for EPrint ID $eprintid, skipping ALL eprints: " . $@ );
-                last EPRINT;
-            };
+	    my $citedata;
+	    eval {
+		$citedata = $plugin->get_epdata( $eprint );
+		1;
+	      } or do
+	    {
+		# Give up if get_epdata() fails and doesn't handle
+		# the exception
+		$plugin->error( "Error importing cites for EPrint ID $eprintid, skipping ALL eprints: " . $@ );
+		last EPRINT;
+	    };
 
-            # Skip to the next eprint if get_response() has returned
-            # undef
-            if ( !defined $citedata )
-            {
-                $plugin->warning( "No matches found for EPrint ID $eprintid" );
-                next EPRINT;
-            }
+	    # Skip to the next eprint if get_response() has returned
+	    # undef
+	    if( !defined $citedata )
+	    {
+		$plugin->warning( "No matches found for EPrint ID $eprintid" );
+		next EPRINT;
+	    }
 
-            # convert it to a data object
-            $citedata->{referent_id} = $eprintid;
-            $citedata->{datestamp} = EPrints::Time::get_iso_timestamp();
-            #print STDERR Dumper( $citedata ), "\n";
-            my $dataobj = $plugin->epdata_to_dataobj( $opts{dataset}, $citedata );
-            if ( defined $dataobj )
-            {
-                #print STDERR "[debug] Cite stored for EPrint ID $eprintid.\n";
-                push @ids, $dataobj->get_id;
-            }
-        }
-        else
-        {
-            $plugin->warning( "EPrint ID $eprintid does not exist." );
-        }
+	    # convert it to a data object
+	    $citedata->{referent_id} = $eprintid;
+	    $citedata->{datestamp}   = EPrints::Time::get_iso_timestamp();
 
-    } # End EPRINT
+	    #print STDERR Dumper( $citedata ), "\n";
+	    my $dataobj = $plugin->epdata_to_dataobj( $opts{dataset}, $citedata );
+	    if( defined $dataobj )
+	    {
+		#print STDERR "[debug] Cite stored for EPrint ID $eprintid.\n";
+		push @ids, $dataobj->get_id;
+	    }
+	}
+	else
+	{
+	    $plugin->warning( "EPrint ID $eprintid does not exist." );
+	}
+
+    }    # End EPRINT
 
     return \@ids;
 }
-
 
 #
 # Check whether or not the plug-in can hope to retrieve citation data
@@ -207,13 +206,12 @@ sub process_eprints
 #
 sub can_process
 {
-	my ( $plugin, $eprint ) = @_;
+    my( $plugin, $eprint ) = @_;
 
-	$plugin->error( "EPrints::Plugin::Import::CitationService::can_process must be over-ridden." );
+    $plugin->error( "EPrints::Plugin::Import::CitationService::can_process must be over-ridden." );
 
-	return 0;
+    return 0;
 }
-
 
 #
 # Returns an epdata hashref for a citation datum for $eprint or undef
@@ -225,14 +223,13 @@ sub can_process
 #
 sub get_epdata
 {
-	my ( $plugin, $eprint ) = @_;
+    my( $plugin, $eprint ) = @_;
 
-	$plugin->error( "EPrints::Plugin::Import::CitationService::get_response must be over-ridden." );
+    $plugin->error( "EPrints::Plugin::Import::CitationService::get_response must be over-ridden." );
 
-	return undef;
+    return undef;
 
 }
-
 
 #
 # Perform any clean up required at the end of the importation. This

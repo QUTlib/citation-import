@@ -10,22 +10,22 @@ package EPrints::Plugin::Import::CitationService::Scopus;
 ###############################################################################
 #
 # Copyright 2015 Queensland University of Technology. All Rights Reserved.
-# 
+#
 #  This file is part of the Citation Count Dataset and Import Plug-ins for GNU
 #  EPrints 3.
-#  
+#
 #  Copyright (c) 2015 Queensland University of Technology, Queensland, Australia
-#  
+#
 #  The plug-ins are free software; you can redistribute them and/or modify
 #  them under the terms of the GNU General Public License as published by
 #  the Free Software Foundation; either version 2 of the License, or
 #  (at your option) any later version.
-#  
+#
 #  The plug-ins are distributed in the hope that they will be useful,
 #  but WITHOUT ANY WARRANTY; without even the implied warranty of
 #  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #  GNU General Public License for more details.
-#  
+#
 #  You should have received a copy of the GNU General Public License
 #  along with EPrints 3; if not, write to the Free Software
 #  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
@@ -35,6 +35,12 @@ package EPrints::Plugin::Import::CitationService::Scopus;
 # October 2015 / Matty K:
 #
 # - update to use new api.elsevier.com API endpoint (big change)
+# *** DEV NOTES:
+#   http://dev.elsevier.com/
+#   http://api.elsevier.com/documentation/SCOPUSSearchAPI.wadl
+#   http://api.elsevier.com/content/search/scopus?httpAccept=application/xml&apiKey=xxxxxxxx&query=doi(10.1080/00220272.2014.966152)&suppressNavLinks=true
+# (old):
+#   http://searchapi.scopus.com/documentSearch.url?format=XML&apiKey=xxxxxxxx&search=doi(10.1080/00220272.2014.966152)
 #
 ######################################################################
 #
@@ -83,18 +89,21 @@ sub new
 
     # get the developer key
     $self->{dev_id} = $self->{session}->get_conf( "scapi", "developer_id" );
-    if ( !defined( $self->{dev_id} ) ) {
-	$self->{error} = 'Unable to load the Scopus developer key.';
+    if( !defined( $self->{dev_id} ) )
+    {
+	$self->{error}   = 'Unable to load the Scopus developer key.';
 	$self->{disable} = 1;
 	return $self;
     }
 
     # An ordered list of the methods for generating querystrings
-    $self->{queries} = [qw{
-			   _get_querystring_eid
-			   _get_querystring_doi
-			   _get_querystring_metadata
-		}];
+    $self->{queries} = [
+	qw{
+	  _get_querystring_eid
+	  _get_querystring_doi
+	  _get_querystring_metadata
+	  }
+    ];
     $self->{current_query} = -1;
 
     return $self;
@@ -105,9 +114,9 @@ sub new
 #
 sub can_process
 {
-    my ( $plugin, $eprint ) = @_;
+    my( $plugin, $eprint ) = @_;
 
-    if ( $eprint->is_set( "scopus_cluster" ) )
+    if( $eprint->is_set( "scopus_cluster" ) )
     {
 	# do not process eprints with EID set to "-"
 	return 0 if $eprint->get_value( "scopus_cluster" ) eq "-";
@@ -117,7 +126,7 @@ sub can_process
     }
 
     # we can retrieve data if this eprint has a (usable) DOI
-    return 1 if ( $eprint->is_set( "id_number" ) && is_usable_doi( $eprint->get_value( "id_number" ) ) );
+    return 1 if( $eprint->is_set( "id_number" ) && is_usable_doi( $eprint->get_value( "id_number" ) ) );
 
     # Scopus doesn't contain data for the following types
     my $type = $eprint->get_value( "type" );
@@ -138,7 +147,7 @@ sub can_process
 #
 sub get_epdata
 {
-    my ( $plugin, $eprint ) = @_;
+    my( $plugin, $eprint ) = @_;
 
     my $eprintid = $eprint->get_id();
 
@@ -147,89 +156,84 @@ sub get_epdata
     my $response_xml;
     my $found_a_match = 0;
     $plugin->_reset_query_methods();
-    QUERY_METHOD: while ( !$found_a_match && defined $plugin->_next_query_method() )
+  QUERY_METHOD: while( !$found_a_match && defined $plugin->_next_query_method() )
     {
 	my $search = $plugin->_get_query( $eprint );
-	next QUERY_METHOD if ( !defined $search );
+	next QUERY_METHOD if( !defined $search );
 
 	# build the URL from which we can download the data
 	my $quri = $plugin->_get_query_uri( $search );
 
 	# Repeatedly query the citation service until a response is
 	# received or max allowed network requests has been reached.
-	my $response = $plugin->_call( $quri,
-				       $plugin->{net_retry}->{max},
-				       $plugin->{net_retry}->{interval}
-				   );
+	my $response = $plugin->_call( $quri, $plugin->{net_retry}->{max}, $plugin->{net_retry}->{interval} );
 
-	if ( !defined( $response ) )
+	if( !defined( $response ) )
 	{
 	    # The server is not responding or there is a transport
 	    # error, give up
-	    die( "No response from Scopus after " . $plugin->{net_retry}->{max} .
-		 " attempts. Giving up." );
+	    die( "No response from Scopus after " . $plugin->{net_retry}->{max} . " attempts. Giving up." );
 	}
 
 	# Got a response, now try to parse it
 	my $xml_parser = $plugin->{session}->xml;
+
 	# Workaround for malformed XML error responses part 1
-	my $status_code = '';
+	my $status_code   = '';
 	my $status_detail = '';
+
 	# End workaround part 1
-	eval
-	{
+	eval {
 	    $response_xml = $xml_parser->parse_string( $response->content );
 	    1;
-	}
-	or do
+	  }
+	  or do
 	{
 	    # Workaround for malformed XML error responses part 2 --
 	    # parse out the status code and detail using regex's
-	    if ( $response->content =~ m/<statusCode[^>]*>([^<]+)<\/statusCode>/g )
+	    if( $response->content =~ m/<statusCode[^>]*>([^<]+)<\/statusCode>/g )
 	    {
 		$status_code = $1;
 	    }
-	    if ( $status_code eq 'ERROR' )
+	    if( $status_code eq 'ERROR' )
 	    {
 		$plugin->warning( "Received malformed XML error response" );
-		if ( $response->content =~ m/<detail[^>]*>([^<]+)<\/detail>/g ) # FIXME: is this <detail/> or <statusText/> ?
+		if( $response->content =~ m/<detail[^>]*>([^<]+)<\/detail>/g )    # FIXME: is this <detail/> or <statusText/> ?
 		{
 		    $status_detail = $1;
 		}
-		$plugin->error( "Scopus responded with error condition for EPrint ID $eprintid: $status_code, " .
-				$status_detail .
+		$plugin->error(
+			      "Scopus responded with error condition for EPrint ID $eprintid: $status_code, " . $status_detail .
 				', Request URL: ' . $quri->as_string );
 		next QUERY_METHOD;
 	    }
 	    else
 	    {
 		# End workaround part 2
-		$plugin->warning( "Unable to parse response XML: \n" . $@ . ": " .$response->content );
+		$plugin->warning( "Unable to parse response XML: \n" . $@ . ": " . $response->content );
 		die( 'Unable to parse response' );
 	    }
 	};
 
 	$status_code = $plugin->get_response_status_code( $response_xml );
-	if ( $status_code ne 'OK' && $status_code ne 'PartOK' )
+	if( $status_code ne 'OK' && $status_code ne 'PartOK' )
 	{
 	    # Don't die on errors because these may be caused by data
 	    # specific to a given eprint and dying would prevent
 	    # updates for the remaining eprints
 	    $plugin->error( "Scopus responded with error condition for EPrint ID $eprintid: $status_code, " .
-			    $plugin->get_response_status_detail( $response_xml ) .
-			    ', Request URL: ' . $quri->as_string );
+			    $plugin->get_response_status_detail( $response_xml ) . ', Request URL: ' . $quri->as_string );
 	    next QUERY_METHOD;
 	}
 
 	$found_a_match = ( $plugin->get_number_matches( $response_xml ) > 0 );
 
-    } # End QUERY_METHOD
+    }    # End QUERY_METHOD
 
-    return undef if ( !$found_a_match );
+    return undef if( !$found_a_match );
 
     return $plugin->response_to_epdata( $response_xml );
 }
-
 
 #
 # Select the next query method. Returns the
@@ -241,8 +245,8 @@ sub get_epdata
 #
 sub _next_query_method
 {
-    my ( $plugin ) = @_;
-    if ( $plugin->{current_query} >= ( scalar @{$plugin->{queries}} - 1 ) )
+    my( $plugin ) = @_;
+    if( $plugin->{current_query} >= ( scalar @{ $plugin->{queries} } - 1 ) )
     {
 	$plugin->{current_query} = undef;
 	return undef;
@@ -258,7 +262,7 @@ sub _next_query_method
 #
 sub _reset_query_methods
 {
-    my ( $plugin ) = @_;
+    my( $plugin ) = @_;
     $plugin->{current_query} = -1;
     return;
 }
@@ -270,8 +274,8 @@ sub _reset_query_methods
 #
 sub _get_query
 {
-    my ( $plugin, $eprint ) = @_;
-    my $query_generator_fname = $plugin->{queries}->[$plugin->{current_query}];
+    my( $plugin, $eprint ) = @_;
+    my $query_generator_fname = $plugin->{queries}->[ $plugin->{current_query} ];
     return $plugin->$query_generator_fname( $eprint );
 }
 
@@ -282,23 +286,24 @@ sub _get_query
 
 sub _get_querystring_eid
 {
-    my ( $plugin, $eprint ) = @_;
-    return undef if ( !$eprint->is_set( 'scopus_cluster' )
-		      || $eprint->get_value( 'scopus_cluster' ) eq '-' );
+    my( $plugin, $eprint ) = @_;
+    return undef if(   !$eprint->is_set( 'scopus_cluster' )
+		     || $eprint->get_value( 'scopus_cluster' ) eq '-' );
     return 'eid(' . $eprint->get_value( 'scopus_cluster' ) . ')';
 }
 
 sub _get_querystring_doi
 {
-    my ( $plugin, $eprint ) = @_;
-    return undef if ( !$eprint->is_set( 'id_number' )
-		      || !is_usable_doi( $eprint->get_value( 'id_number' ) ) );
+    my( $plugin, $eprint ) = @_;
+    return undef if(    !$eprint->is_set( 'id_number' )
+		     || !is_usable_doi( $eprint->get_value( 'id_number' ) ) );
     return 'doi(' . $eprint->get_value( 'id_number' ) . ')';
 }
 
 sub _get_querystring_metadata
 {
-    my ( $plugin, $eprint ) = @_;
+    my( $plugin, $eprint ) = @_;
+
     # search using title and first author
 
     # Decompose ligatures into component characters - Scopus doesn't
@@ -308,28 +313,28 @@ sub _get_querystring_metadata
     my $title = NFKC( $eprint->get_value( 'title' ) ) || '';
 
     # Remove these because they break the query parser
-    $title =~ s/[%&<>]/ /g; # percentages, ampersands
-    $title =~ s/["\x{E2809C}\x{E2809D}]/ /g; # various double quotation marks
+    $title =~ s/[%&<>]/ /g;                     # percentages, ampersands
+    $title =~ s/["\x{E2809C}\x{E2809D}]/ /g;    # various double quotation marks
 
-    $title .= "\""; # close the phrase search quotation marks
+    $title .= "\"";                             # close the phrase search quotation marks
 
     # Question marks and asterixes are both wildcard characters and
     # won't make a literal match or will break the parser if left in.
     # The workaround is to add one to the end of the querystring
     # wrapped in the curly brackets (the equivalent of escaping them)
-    $title .= "{?}" if ( $title =~ s/[?]/ /g );
-    $title .= "{*}" if ( $title =~ s/[*]/ /g );
+    $title .= "{?}" if( $title =~ s/[?]/ /g );
+    $title .= "{*}" if( $title =~ s/[*]/ /g );
 
     my $query = "title(\"$title)";
 
-    my @authors = @{$eprint->value( 'creators_name' )||[]};
+    my @authors = @{ $eprint->value( 'creators_name' ) || [] };
     if( scalar( @authors ) > 0 )
     {
-	my $authlastname = $authors[0]->{family};
+	my $authlastname = $authors[ 0 ]->{family};
 	$query .= " and authlastname($authlastname)";
     }
-    
-    if ( $eprint->is_set( 'date' ) )
+
+    if( $eprint->is_set( 'date' ) )
     {
 	# limit by publication year
 	my $pubyear = substr( $eprint->get_value( 'date' ), 0, 4 );
@@ -344,10 +349,11 @@ sub _get_querystring_metadata
 #
 sub get_response_status_code
 {
-    my ( $plugin, $response_xml ) = @_;
+    my( $plugin, $response_xml ) = @_;
+
     # FIXME: successful requests don't have a <status/> anymore
-    my $status = $response_xml->documentElement->getChildrenByTagName( 'status' )->[0];
-    return $status->getChildrenByTagName( 'statusCode' )->[0]->textContent;
+    my $status = $response_xml->documentElement->getChildrenByTagName( 'status' )->[ 0 ];
+    return $status->getChildrenByTagName( 'statusCode' )->[ 0 ]->textContent;
 }
 
 #
@@ -355,9 +361,9 @@ sub get_response_status_code
 #
 sub get_response_status_detail
 {
-    my ( $plugin, $response_xml ) = @_;
-    my $status = $response_xml->documentElement->getChildrenByTagName( "status" )->[0];
-    return $status->getChildrenByTagName( 'detail' )->[0]->textContent;
+    my( $plugin, $response_xml ) = @_;
+    my $status = $response_xml->documentElement->getChildrenByTagName( "status" )->[ 0 ];
+    return $status->getChildrenByTagName( 'detail' )->[ 0 ]->textContent;
 }
 
 #
@@ -365,10 +371,11 @@ sub get_response_status_detail
 #
 sub get_number_matches
 {
-    my ( $plugin, $response_xml ) = @_;
+    my( $plugin, $response_xml ) = @_;
+
     # FIXME: this is now <opensearch:totalResults/>, a direct descendent of the document element
-    my $result = $response_xml->getElementsByTagName( "scopusSearchResults" )->[0];
-    return $result->getElementsByTagName( 'totalResults' )->[0]->textContent;
+    my $result = $response_xml->getElementsByTagName( "scopusSearchResults" )->[ 0 ];
+    return $result->getElementsByTagName( 'totalResults' )->[ 0 ]->textContent;
 }
 
 #
@@ -378,17 +385,20 @@ sub get_number_matches
 # there were matches to the query.
 sub response_to_epdata
 {
-    my ( $plugin, $response_xml ) = @_;
+    my( $plugin, $response_xml ) = @_;
 
     # FIXME: these are now <entry/> elements directly descended from the document element
-    my $result = shift @{$response_xml->getElementsByTagName( "scopusSearchResults" )};
-    my $record = shift @{$result->getElementsByTagName( "scopusResult" )};
+    my $result = shift @{ $response_xml->getElementsByTagName( "scopusSearchResults" ) };
+    my $record = shift @{ $result->getElementsByTagName( "scopusResult" ) };
+
     # XXX: this is the same
-    my $eid = shift @{$record->getElementsByTagName( "eid" )};
+    my $eid = shift @{ $record->getElementsByTagName( "eid" ) };
+
     # FIXME: now <citedby-count/>
-    my $citation_count = shift @{$record->getElementsByTagName( "citedbycount" )};
-    return { cluster => $eid->textContent,
-	     impact => $citation_count->textContent };
+    my $citation_count = shift @{ $record->getElementsByTagName( "citedbycount" ) };
+    return { cluster=>$eid->textContent,
+	     impact=>$citation_count->textContent
+	   };
 }
 
 #
@@ -398,26 +408,26 @@ sub response_to_epdata
 #
 sub _call
 {
-    my ( $plugin, $uri, $max_retries, $retry_delay) = @_;
+    my( $plugin, $uri, $max_retries, $retry_delay ) = @_;
 
     my $ua = LWP::UserAgent->new;
-    if ( EPrints::Utils::is_set( $ENV{http_proxy} ) )
+    if( EPrints::Utils::is_set( $ENV{http_proxy} ) )
     {
 	$ua->proxy( 'http', $ENV{http_proxy} );
     }
 
-    my $response = undef;
+    my $response       = undef;
     my $net_tries_left = $max_retries + 1;
-    while ( !defined $response && $net_tries_left > 0 )
+    while( !defined $response && $net_tries_left > 0 )
     {
 	$response = $ua->get( $uri );
 
-	if ( !$response->is_success )
+	if( !$response->is_success )
 	{
 	    # no response; go to sleep before trying again
-	    $plugin->warning( 'Unable to retrieve data from Scopus. The response was: ' . $response->status_line .
-			      "Waiting " . $retry_delay . " seconds before trying again."
-			  );
+	    $plugin->warning(
+		'Unable to retrieve data from Scopus. The response was: ' . $response->status_line . "Waiting " . $retry_delay .
+		  " seconds before trying again." );
 	    sleep( $retry_delay );
 	    $net_tries_left--;
 	    $response = undef;
@@ -436,7 +446,7 @@ sub _call
 #
 sub is_usable_doi
 {
-    my ( $doi ) = @_;
+    my( $doi ) = @_;
 
     return 0 if( !EPrints::Utils::is_set( $doi ) );
 
@@ -451,13 +461,13 @@ sub is_usable_doi
 
 sub _get_query_uri
 {
-    my ( $plugin, $search ) = @_;
+    my( $plugin, $search ) = @_;
 
     my $quri = $SEARCHAPI->clone;
-    $quri->query_form( httpAccept => 'application/xml',
-	       apiKey => $plugin->{dev_id},
-	       query => $search,
-	     );
+    $quri->query_form( httpAccept=>'application/xml',
+		       apiKey=>$plugin->{dev_id},
+		       query=>$search,
+		     );
     return $quri;
 }
 
