@@ -339,7 +339,7 @@ sub _get_querystring_metadata
 }
 
 #
-# Return the content of the status/statusCode and status/detail elements
+# Return the content of the status/statusCode and status/statusText elements
 # from an error response
 #
 sub get_response_status
@@ -348,7 +348,7 @@ sub get_response_status
 
     my $status = $response_xml->documentElement->getChildrenByTagName( 'status' )->[ 0 ];
     return ( $status->getChildrenByTagName( 'statusCode' )->[ 0 ]->textContent,
-	     $status->getChildrenByTagName( 'detail' )->[ 0 ]->textContent, );
+	     $status->getChildrenByTagName( 'statusText' )->[ 0 ]->textContent, );
 }
 
 #
