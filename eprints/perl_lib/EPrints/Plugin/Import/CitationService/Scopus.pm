@@ -430,7 +430,7 @@ sub is_usable_doi
 
     return 0 if( !EPrints::Utils::is_set( $doi ) );
 
-    $doi =~ s!^http://(dx\.)\?doi\.org/!!;
+    $doi =~ s!^http://(dx\.)?doi\.org/!!;
     $doi =~ s!^doi:!!;
 
     return 0 if( $doi !~ m!^10\.\d{4}/! );
