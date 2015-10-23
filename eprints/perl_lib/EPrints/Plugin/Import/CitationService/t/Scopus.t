@@ -358,20 +358,21 @@ sub test_eprints
         #print STDERR $response->content, "\n";
 
         # Fail if a non-OK status code was returned
-        my $status_code = _parse_element_content( $response->content, 'statusCode' );
-        if ( !is( $status_code, 'OK', 'query returned OK status' ) )
+        my $status = $response->code;
+        if ( !is( $status, 200, 'query returned OK status' ) )
         {
             diag( 'Title: ' . $test_item->{title} );
-            diag( 'Status code: ' . $status_code .
-                  ': Error detail: ' . _parse_element_content( $response->content, 'detail' ) );
-            diag ( 'Query: ' . $quri->as_string );
+            diag( 'Status: ' . $status .
+                  ': Error code: ' . _parse_element_content( $response->content, 'statusCode' ) .
+                  ': Error detail: ' . _parse_element_content( $response->content, 'statusText' ) );
+            diag( 'Query: ' . $quri->as_string );
         }
         elsif ( $check_for_match )
         {
-            if ( !ok( _parse_element_content( $response->content, 'totalResults' ) > 0, 'Match found' ) )
+            if ( !ok( _parse_element_content( $response->content, 'opensearch:totalResults' ) > 0, 'Match found' ) )
             {
                 diag( 'Title: ' . $test_item->{title} );
-                diag ( 'Query: ' . $quri->as_string );
+                diag( 'Query: ' . $quri->as_string );
             }
         }
     }
