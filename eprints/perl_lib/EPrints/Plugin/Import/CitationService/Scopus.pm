@@ -69,6 +69,12 @@ use URI;
 
 our $SEARCHAPI = URI->new( "http://api.elsevier.com/content/search/scopus" );
 
+my $NS_CTO        = 'http://www.elsevier.com/xml/cto/dtd';
+my $NS_ATOM       = 'http://www.w3.org/2005/Atom';
+my $NS_PRISM      = 'http://prismstandard.org/namespaces/basic/2.0/';
+my $NS_OPENSEARCH = 'http://a9.com/-/spec/opensearch/1.1/';
+my $NS_DC         = 'http://purl.org/dc/elements/1.1/';
+
 #
 # Create a new plug-in object.
 #
@@ -358,7 +364,10 @@ sub get_number_matches
 {
     my( $plugin, $response_xml ) = @_;
 
-    return $response_xml->getElementsByTagName( "opensearch:totalResults" )->[ 0 ]->textContent;
+    my $totalResults = $response_xml->getElementsByTagNameNS( $NS_OPENSEARCH, "totalResults" )->[ 0 ];
+
+    return 0 if !defined $totalResults;
+    return $totalResults->textContent;
 }
 
 #
@@ -371,11 +380,11 @@ sub response_to_epdata
 {
     my( $plugin, $response_xml ) = @_;
 
-    my $record = shift @{ $response_xml->getElementsByTagName( "entry" ) };
+    my $record = shift @{ $response_xml->getElementsByTagNameNS( $NS_ATOM, "entry" ) };
 
-    my $eid = shift @{ $record->getElementsByTagName( "eid" ) };
+    my $eid = shift @{ $record->getElementsByLocalName( "eid" ) };
 
-    my $citation_count = shift @{ $record->getElementsByTagName( "citedby-count" ) };
+    my $citation_count = shift @{ $record->getElementsByLocalName( "citedby-count" ) };
     return { cluster=>$eid->textContent,
 	     impact=>$citation_count->textContent
 	   };
