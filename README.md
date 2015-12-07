@@ -119,7 +119,7 @@ Updates:
 Copyright
 ---------
 
-Copyright (c) 2011 Queensland University of Technology, Queensland, Australia
+Copyright (c) 2015 Queensland University of Technology, Queensland, Australia
 
 The plug-ins are free software; you can redistribute them and/or modify
 them under the terms of the GNU General Public License as published by
