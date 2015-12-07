@@ -1,0 +1,14 @@
+<?xml version="1.0" ?>
+
+<!-- 
+	Search result citation style for, ahem, citation data.
+-->
+
+<cite:citation xmlns="http://www.w3.org/1999/xhtml" xmlns:cite="http://eprints.org/ep3/citation" xmlns:epc="http://eprints.org/ep3/control" type="table_row">
+  <tr class="ep_search_result">
+    <td style="padding-left: 0.5em">
+      <epc:if test="is_set($item.property('referent_id'))">[<a href="/{$item.property('referent_id')}">#<epc:print expr="$item.property('referent_id')"/></a>]</epc:if>
+      <epc:print expr="$item.citation('brief')" />
+    </td>
+  </tr>
+</cite:citation>
