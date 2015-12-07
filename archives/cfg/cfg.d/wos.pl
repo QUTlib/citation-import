@@ -25,13 +25,6 @@ $c->{wos}->{get_uri_for_eprint} = sub {
 	    'rft_val_fmt' => 'info:ofi/fmt:kev:mtx:journal',
 	    'svc.fullrec' => 'yes',
 	    'rft_id'      => 'info:ut/' . $eprint->get_value( 'wos_cluster' ),
-
-	    # MG: The following params were in the example but
-	    # don't seem to be required ...
-	    #'svc_val_fmt' => 'info:ofi/fmt:kev:mtx:sch_svc',
-	    #'rft.genre' => 'article',
-	    #'rfr_id' => 'info:sid/qut.edu.au:blah',
-	    #'req_id' => 'mailto:blah@qut.edu.au',
 	);
 	return $uri;
     }
