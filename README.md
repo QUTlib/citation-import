@@ -10,11 +10,11 @@ but requests that robots do not extract data from its web site (so you should
 only use the plug-in to conduct searches triggered manually). See the web sites
 listed below for the details for each service.
 
-### Scopus
+### Scopus:
 
   The Scopus plug-in uses the Scopus Document Search API (the XML web service
   that underpins the JavaScript APIs). Your institution requires a developer
-  key for the API. See https://www.developers.elsevier.com/cms/index.
+  key for the API. See http://dev.elsevier.com/
 
 ### Web of Science:
 
@@ -27,7 +27,7 @@ listed below for the details for each service.
 
   The Google Scholar plug-in is a screen-scraper based on the
   Export::GScholar plug-in shipped with EPrints 3.2. See
-  http://scholar.google.com/intl/en/scholar/about,html. Google's full
+  http://scholar.google.com/intl/en/scholar/about.html. Google's full
   terms of use are at http://www.google.com/accounts/TOS. This plugin
   is not actively maintained.
 
@@ -42,9 +42,11 @@ from CPAN:
 * `SOAP::Lite` (for Web of Science)
 * `WWW::Mechanize::Sleepy` (for Google Scholar)
 * `URI`. It is recommended that you upgrade the URI package by
-updating the one packaged with EPrints in *perl_lib* or by deleting that
-one and using the latest from CPAN. *NOTE:* ensure that `URI::OpenURL`
-remains installed.
+    updating the one packaged with EPrints in *perl_lib* or by deleting that
+    one and using the latest from CPAN. *NOTE:* ensure that `URI::OpenURL`
+    remains installed.
+
+Installation steps:
 
 1.  Copy all of the files in the *eprints* sub-directory into the root directory
     of your EPrints installation, e.g. `cp -R eprints/* /opt/eprints3`
@@ -55,13 +57,18 @@ remains installed.
 
 3.  Go to the *cfg.d* directory of your archive.
 
-    1.  Move the contents of *eprint_fields.pl.inc* into your *eprints_fields.pl*
-    2.  Move the contents of *datasets.pl.inc* into your *datasets.pl*
-    3.  Insert your Scopus developer key into *scapi.pl*
+    1.  Transfer the contents of *eprint_fields.pl.inc* into your *eprints_fields.pl*
+    2.  Transfer the contents of *datasets.pl.inc* into your *datasets.pl*
+    3.  Update *scapi.pl* to include your Scopus developer key
     4.  Check the options in *scapi.pl*, *wos.pl* and *gscholar.pl*
     5.  If you want to view and manipulate citation objects via the "Manage
         Records" interface, add the lines "+citation/view" and
         "+citation/destroy" the appropriate user roles in *user_roles.pl*
+    6.  Enable the relevant plugins; e.g.
+
+        ```perl
+        $c->{plugins}{'Import::CitationService::Scopus}{params}{disable} = 0;
+        ```
 
 4.  Update the database structure of your archive to include the new dataset
     and fields, e.g. `epadmin update_database_structure foobar`
@@ -97,7 +104,7 @@ Support
 For general support enquiries please use the EPrints Tech List at
 http://www.eprints.org/tech.php/
 
-Bugs and and feature requests can be logged in GitHub.
+Bugs and and feature requests can be logged in [GitHub](https://github.com/QUTlib/citation-import/).
 
 
 Contributors
@@ -107,19 +114,23 @@ The citation count import plug-ins were developed by the Digital Repository
 Team at the Queensland University of Technology in Brisbane, Australia.
 For more about us, see http://www.digitalrepository.qut.edu.au.
 
-Developers:
+Maintainer:
 
-*  Nicholas Sheppard <nicholas.sheppard@qut.edu.au>
-*  Mark Gregson <mark.gregson@qut.edu.au>
+*  [Matthew Kerwin](https://github.com/phluid61) \<matthew.kerwin@qut.edu.au>
+
+Original Developers:
+
+*  [Nicholas Sheppard](https://github.com/npsheppard)
+*  [Mark Gregson](https://github.com/MrkGrgsn)
 
 Updates:
-*  Sebastien Francois <sf2@ecs.soton.ac.uk>
+*  [Sebastien Francois](https://github.com/sebastfr) \<sf2@ecs.soton.ac.uk>
 
 
 Copyright
 ---------
 
-Copyright (c) 2015 Queensland University of Technology, Queensland, Australia
+Copyright (c) 2011-2015 Queensland University of Technology, Queensland, Australia
 
 The plug-ins are free software; you can redistribute them and/or modify
 them under the terms of the GNU General Public License as published by
@@ -137,6 +148,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 Changelog
 ---------
+
+- October 2015 (phluid61)
+
+    * Scopus: update to use new api.elsevier.com API endpoint
 
 - May-June 2013 (MrkGrgsn w/sf2)
 
