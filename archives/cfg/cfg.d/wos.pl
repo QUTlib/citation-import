@@ -20,11 +20,10 @@ $c->{wos}->{get_uri_for_eprint} = sub {
     if( $eprint->is_set( 'wos_cluster' ) )
     {
 	my $uri = $eprint->repository->config( 'wos', 'openurl_uri' )->clone;
-	$uri->query_form(
-	    'url_ver'     => 'Z39.88-2004',
-	    'rft_val_fmt' => 'info:ofi/fmt:kev:mtx:journal',
-	    'svc.fullrec' => 'yes',
-	    'rft_id'      => 'info:ut/' . $eprint->get_value( 'wos_cluster' ),
+	$uri->query_form( 'url_ver'     => 'Z39.88-2004',
+			  'rft_val_fmt' => 'info:ofi/fmt:kev:mtx:journal',
+			  'svc.fullrec' => 'yes',
+			  'rft_id'      => 'info:ut/' . $eprint->get_value( 'wos_cluster' ),
 	);
 	return $uri;
     }
