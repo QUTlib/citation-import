@@ -649,7 +649,7 @@ sub test_eprint_selection_algorithm
 	}
 	else
 	{
-	    push @ids_update, get_eprintids_for_yesterday( $session, $dataset, $test_year, $test_month + 1 );
+	    push @ids_update, get_eprintids_for_yesterday( $session, $dataset, $test_year, $test_month + 1, 1 );
 	}
 
     }
