@@ -49,11 +49,11 @@ from CPAN:
 Installation steps:
 
 1.  Copy all of the files in the *eprints* sub-directory into the root directory
-    of your EPrints installation, e.g. `cp -R eprints/* /opt/eprints3`
+    of your EPrints installation, e.g. `cp -R eprints/* /opt/eprints3/`
 
 2.  Copy all of the files in the *archives* sub-directory into the configuration
     folder of the archive into which you want to import citation data, e.g.
-    `cp -R archives/* /opt/eprints3/archives/foobar`
+    `cp -R archives/* /opt/eprints3/archives/foobar/`
 
 3.  Go to the *cfg.d* directory of your archive.
 
@@ -104,15 +104,16 @@ Support
 For general support enquiries please use the EPrints Tech List at
 http://www.eprints.org/tech.php/
 
-Bugs and and feature requests can be logged in [GitHub](https://github.com/QUTlib/citation-import/).
+Bugs and and feature requests can be logged in [GitHub](https://github.com/QUTlib/citation-import/issues).
 
 
 Contributors
 ------------
 
-The citation count import plug-ins were developed by the Digital Repository
-Team at the Queensland University of Technology in Brisbane, Australia.
-For more about us, see http://www.digitalrepository.qut.edu.au.
+The citation count import plug-ins were developed by the Library eServices
+Applications and Development Team at the Queensland University of Technology
+in Brisbane, Australia.
+For more about us, see https://www.library.qut.edu.au.
 
 Maintainer:
 
@@ -130,7 +131,7 @@ Updates:
 Copyright
 ---------
 
-Copyright (c) 2011-2015 Queensland University of Technology, Queensland, Australia
+Copyright (c) 2011-2016 Queensland University of Technology, Queensland, Australia
 
 The plug-ins are free software; you can redistribute them and/or modify
 them under the terms of the GNU General Public License as published by
