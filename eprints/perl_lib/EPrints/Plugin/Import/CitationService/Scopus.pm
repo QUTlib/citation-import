@@ -367,7 +367,7 @@ sub get_number_matches
     my $totalResults = $response_xml->getElementsByTagNameNS( $NS_OPENSEARCH, "totalResults" )->[ 0 ];
 
     return 0 if !defined $totalResults;
-    return $totalResults->textContent;
+    return $totalResults->textContent+0;
 }
 
 #
