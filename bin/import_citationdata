@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w -I/opt/eprints3/perl_lib
+#!/usr/bin/perl
 
 ###############################################################################
 #
@@ -110,6 +110,10 @@ Shows why a plugin is disabled.
 
 use strict;
 use warnings;
+
+# The script should be installed in $EPRINTS_PATH/archives/<id>/bin/
+use FindBin;
+use lib "$FindBin::Bin/../../../perl_lib";
 
 use Getopt::Long;
 use Pod::Usage;

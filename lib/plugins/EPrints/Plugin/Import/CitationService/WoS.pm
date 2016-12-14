@@ -76,12 +76,12 @@ use EPrints::Plugin::Import::CitationService;
 our @ISA = ( "EPrints::Plugin::Import::CitationService" );
 
 # service endpoints and namespaces - these can be locally defined (e.g. if you have a Premium account)
-our $WOK_CONF = { 'AUTHENTICATE_ENDPOINT'=>'http://search.webofknowledge.com/esti/wokmws/ws/WOKMWSAuthenticate',
-		  'AUTHENTICATE_NS'=>'http://auth.cxf.wokmws.thomsonreuters.com',
-		  'WOKSEARCH_ENDPOINT'=>'http://search.webofknowledge.com/esti/wokmws/ws/WokSearch',
-		  'WOKSEARCH_NS'=>'http://woksearch.cxf.wokmws.thomsonreuters.com',
-		  'SERVICE_TYPE'=>'woksearch',
-		};
+our $WOK_CONF = { 'AUTHENTICATE_ENDPOINT' => 'http://search.webofknowledge.com/esti/wokmws/ws/WOKMWSAuthenticate',
+		  'AUTHENTICATE_NS'       => 'http://auth.cxf.wokmws.thomsonreuters.com',
+		  'WOKSEARCH_ENDPOINT'    => 'http://search.webofknowledge.com/esti/wokmws/ws/WokSearch',
+		  'WOKSEARCH_NS'          => 'http://woksearch.cxf.wokmws.thomsonreuters.com',
+		  'SERVICE_TYPE'          => 'woksearch',
+};
 
 # the database editions to search. These can be locally defined, see "sub new()".
 our $EDITIONS = [ qw/ SCI SSCI AHCI IC CCR ISTP ISSHP / ];
@@ -138,21 +138,18 @@ sub new
     $self->{query} = {};
 
     # the databaseID or databaseId is always "WOS" (case is important in SOAP)
-    $self->{query}->{databaseId} = SOAP::Data->name( "databaseId"=>"WOS" );
+    $self->{query}->{databaseId} = SOAP::Data->name( "databaseId" => "WOS" );
 
     $self->{soap_editions} = [];
     foreach my $edition ( @$editions )
     {
 	push $self->{soap_editions},
-	  SOAP::Data->name(
-			    "editions"=>\SOAP::Data->value( SOAP::Data->name( "collection"=>"WOS" ),
-							    SOAP::Data->name( "edition"=>"$edition" ),
-							  )
-			  );
+	  SOAP::Data->name( "editions" =>
+		\SOAP::Data->value( SOAP::Data->name( "collection" => "WOS" ), SOAP::Data->name( "edition" => "$edition" ), ) );
     }
 
     # the query language is always English
-    $self->{query}->{queryLanguage} = SOAP::Data->name( "queryLanguage"=>"en" );
+    $self->{query}->{queryLanguage} = SOAP::Data->name( "queryLanguage" => "en" );
 
     # sf2 - counting the number of requests made - see "sub call()" at the end of this file
     $self->{requests} = 0;
@@ -197,13 +194,12 @@ sub get_epdata
     $plugin->get_session();
 
     # Build a SOAP object for this session
-    my $soap = SOAP::Lite->new( proxy=>$WOK_CONF->{WOKSEARCH_ENDPOINT},
-				autotype=>0,
-			      );
+    my $soap = SOAP::Lite->new( proxy    => $WOK_CONF->{WOKSEARCH_ENDPOINT},
+				autotype => 0, );
 
     # set soapAction to an empty string
     $soap->on_action( sub { return ''; } );
-    $soap->transport->http_request->header( "Cookie"=>"SID=\"" . $plugin->{session_id} . "\";" );
+    $soap->transport->http_request->header( "Cookie" => "SID=\"" . $plugin->{session_id} . "\";" );
 
     # get the WoS identifier ("UT") for this eprint
     my $uid;
@@ -293,11 +289,11 @@ sub get_search_for_eprint
 	$date_begin = ( $date - 1 ) . "-01-01";
 	$date_end   = ( $date + 1 ) . "-12-31";
     }
-    my $date_param = SOAP::Data->name( "timeSpan"=>
-					 \SOAP::Data->value( SOAP::Data->name( "begin" )->value( $date_begin ),
-							     SOAP::Data->name( "end" )->value( $date_end )
-							   )
-				     );
+    my $date_param = SOAP::Data->name(
+	  "timeSpan" =>
+	    \SOAP::Data->value( SOAP::Data->name( "begin" )->value( $date_begin ), SOAP::Data->name( "end" )->value( $date_end )
+	    )
+    );
 
     # Build SOAP call
     my @query_params;
@@ -307,7 +303,7 @@ sub get_search_for_eprint
     # encoded properly during serialisation and then add the xsd
     # namespace declarataion to stop the server complaining
     push @query_params,
-      SOAP::Data->name( "userQuery"=>$q )->type( 'string' )->attr( { "xmlns:xsd"=>"http://www.w3.org/2001/XMLSchema" } );
+      SOAP::Data->name( "userQuery" => $q )->type( 'string' )->attr( { "xmlns:xsd" => "http://www.w3.org/2001/XMLSchema" } );
 
     push @query_params, @{ $plugin->{soap_editions} };
     push @query_params, $date_param;
@@ -317,24 +313,24 @@ sub get_search_for_eprint
 
     # sf2 / TODO: v3 has a new format for fields (viewFields, sortFields)
     my $retrieve_params = SOAP::Data->value(
-	SOAP::Data->name( "firstRecord"=>"1" ),
-	SOAP::Data->name( "count"=>"10" ),
+	SOAP::Data->name( "firstRecord" => "1" ),
+	SOAP::Data->name( "count"       => "10" ),
 
 	#		SOAP::Data->name( "fields" => \SOAP::Data->value(
 	#			SOAP::Data->name( "name" )->value( "Date" ),
 	#			SOAP::Data->name( "sort" )->value( "D" )
 	#		) ),
-					   );
+    );
 
     my @params;
-    push @params, SOAP::Data->name( "queryParameters"=>\$q_params );
-    push @params, SOAP::Data->name( "retrieveParameters"=>\$retrieve_params );
+    push @params, SOAP::Data->name( "queryParameters"    => \$q_params );
+    push @params, SOAP::Data->name( "retrieveParameters" => \$retrieve_params );
 
     my $service = $WOK_CONF->{SERVICE_TYPE};
 
     my $som = $plugin->call( $soap, 0,
-	   SOAP::Data->name( "$service:search" )->attr( { "xmlns:$service"=>"http://$service.v3.wokmws.thomsonreuters.com" } )=>
-	     @params );
+			     SOAP::Data->name( "$service:search" )
+			       ->attr( { "xmlns:$service" => "http://$service.v3.wokmws.thomsonreuters.com" } ) => @params );
 
     if( $som->fault() )
     {
@@ -346,8 +342,8 @@ sub get_search_for_eprint
 
 	# MG To Do: it would be useful to log the serialized call
 	# here - logging the userQuery is a good start.
-	$plugin->error( "Unable to retrieve UID from Web of Science(R) for EPrint ID " . $eprint->get_id . ": \n" .
-			$plugin->_get_som_error( $som ) . ", userQuery = $q" );
+	$plugin->error( "Unable to retrieve UID from Web of Science(R) for EPrint ID " .
+			$eprint->get_id . ": \n" . $plugin->_get_som_error( $som ) . ", userQuery = $q" );
 	return undef;
     }
 
@@ -428,39 +424,39 @@ sub get_cites_for_identifier
 	$date_begin = ( substr( $eprint->get_value( "date" ), 0, 4 ) - 1 ) . "-01-01";
     }
     my $date_end = substr( EPrints::Time::get_iso_timestamp(), 0, 10 );
-    my $date_param = SOAP::Data->name( "timeSpan"=>
-					 \SOAP::Data->value( SOAP::Data->name( "begin" )->value( $date_begin ),
-							     SOAP::Data->name( "end" )->value( $date_end )
-							   )
-				     );
+    my $date_param = SOAP::Data->name(
+	  "timeSpan" =>
+	    \SOAP::Data->value( SOAP::Data->name( "begin" )->value( $date_begin ), SOAP::Data->name( "end" )->value( $date_end )
+	    )
+    );
 
     # configure what we want to retrieve
     my $retrieve_params = SOAP::Data->value(
-	SOAP::Data->name( "firstRecord"=>"1" ),
-	SOAP::Data->name( "count"=>"1" ),
+	SOAP::Data->name( "firstRecord" => "1" ),
+	SOAP::Data->name( "count"       => "1" ),
 
 	#		SOAP::Data->name( "fields" => \SOAP::Data->value(
 	#			SOAP::Data->name( "name" )->value( "Date" ),
 	#			SOAP::Data->name( "sort" )->value( "D" )
 	#		) ),
-					   );
+    );
 
     # search for citing articles
     my $som;
 
     my @params;
     push @params, $plugin->{query}->{databaseId};
-    push @params, SOAP::Data->name( 'uid'=>$uid );
+    push @params, SOAP::Data->name( 'uid' => $uid );
     push @params, @{ $plugin->{soap_editions} };
     push @params, $date_param;
     push @params, $plugin->{query}->{queryLanguage};
-    push @params, SOAP::Data->name( "retrieveParameters"=>\$retrieve_params );
+    push @params, SOAP::Data->name( "retrieveParameters" => \$retrieve_params );
 
     my $service = $WOK_CONF->{SERVICE_TYPE};
 
     $som = $plugin->call( $soap, 0,
 			  SOAP::Data->name( "$service:citingArticles" )
-			    ->attr( { "xmlns:$service"=>"http://$service.v3.wokmws.thomsonreuters.com" } )=>@params );
+			    ->attr( { "xmlns:$service" => "http://$service.v3.wokmws.thomsonreuters.com" } ) => @params );
 
     if( $som->fault() )
     {
@@ -479,8 +475,8 @@ sub get_cites_for_identifier
 
 	# MG To do: it would be useful to log the serialized call
 	# here if the faultcode eq 'Client'
-	die( "Unable to retrieve cites for EPrint ID " . $eprint->get_id . " from Web of Science: \n" .
-	     $plugin->_get_som_error( $som ) );
+	die( "Unable to retrieve cites for EPrint ID " .
+	     $eprint->get_id . " from Web of Science: \n" . $plugin->_get_som_error( $som ) );
     }
 
     # we will need the identifier again later, so save it in the result
@@ -508,9 +504,9 @@ sub response_to_epdata
 	die( 'Unable to parse citingArticles response from WoS' );
     }
 
-    return { cluster=>$response->{ut},
-	     impact=>$response->{recordsFound},
-	   };
+    return { cluster => $response->{ut},
+	     impact  => $response->{recordsFound},
+    };
 }
 
 #
@@ -528,9 +524,8 @@ sub get_session
 	return $plugin->{session_id};
     }
 
-    my $soap = SOAP::Lite->new( proxy=>$WOK_CONF->{AUTHENTICATE_ENDPOINT},
-				default_ns=>$WOK_CONF->{AUTHENTICATE_NS},
-			      );
+    my $soap = SOAP::Lite->new( proxy      => $WOK_CONF->{AUTHENTICATE_ENDPOINT},
+				default_ns => $WOK_CONF->{AUTHENTICATE_NS}, );
 
     # set soapAction to an empty string
     $soap->on_action( sub { return ''; } );
@@ -540,8 +535,8 @@ sub get_session
     # SOAP::Serializer::as_authenticate (see below)
     my $som =
       $plugin->call( $soap, 1,
-	       SOAP::Data->name( 'auth' )->prefix( 'auth' )->uri( $WOK_CONF->{AUTHENTICATE_NS} )->type( 'authenticate'=>undef ),
-	       1 );
+	     SOAP::Data->name( 'auth' )->prefix( 'auth' )->uri( $WOK_CONF->{AUTHENTICATE_NS} )->type( 'authenticate' => undef ),
+	     1 );
 
     if( $som->fault() )
     {
@@ -555,7 +550,7 @@ sub get_session
 
 sub SOAP::Serializer::as_authenticate
 {
-    return [ 'authenticate', { 'xmlns'=>$WOK_CONF->{AUTHENTICATE_NS} } ];
+    return [ 'authenticate', { 'xmlns' => $WOK_CONF->{AUTHENTICATE_NS} } ];
 }
 
 #
@@ -568,13 +563,12 @@ sub dispose
     if( defined $plugin->{session_id} )
     {
 	# build a SOAP object
-	my $soap = SOAP::Lite->new( proxy=>$WOK_CONF->{AUTHENTICATE_ENDPOINT},
-				    default_ns=>$WOK_CONF->{AUTHENTICATE_NS}
-				  );
+	my $soap = SOAP::Lite->new( proxy      => $WOK_CONF->{AUTHENTICATE_ENDPOINT},
+				    default_ns => $WOK_CONF->{AUTHENTICATE_NS} );
 
 	# set soapAction to an empty string
 	$soap->on_action( sub { return ''; } );
-	$soap->transport->http_request->header( "Cookie"=>"SID=\"" . $plugin->{session_id} . "\";" );
+	$soap->transport->http_request->header( "Cookie" => "SID=\"" . $plugin->{session_id} . "\";" );
 
 	# close the session
 
@@ -583,7 +577,7 @@ sub dispose
 	# SOAP::Serializer::as_closeSession (see below)
 	my $som =
 	  $soap->call( SOAP::Data->name( 'closeSession' )->prefix( 'auth' )->uri( $WOK_CONF->{AUTHENTICATE_NS} )
-		       ->type( 'closeSession'=>undef ) );
+		       ->type( 'closeSession' => undef ) );
 
 	if( $som->fault() )
 	{
@@ -594,7 +588,7 @@ sub dispose
 
 sub SOAP::Serializer::as_closeSession
 {
-    return [ 'closeSession', { 'xmlns'=>$WOK_CONF->{AUTHENTICATE_NS} } ];
+    return [ 'closeSession', { 'xmlns' => $WOK_CONF->{AUTHENTICATE_NS} } ];
 }
 
 # sf2 - having our own 'call' function allows us to count the number
@@ -623,7 +617,7 @@ sub call
 	# get a new session ID
 	$plugin->get_session;
 
-	$soap->transport->http_request->header( "Cookie"=>"SID=\"" . $plugin->{session_id} . "\";" );
+	$soap->transport->http_request->header( "Cookie" => "SID=\"" . $plugin->{session_id} . "\";" );
 	$plugin->{requests} = 0;
     }
 
@@ -644,9 +638,8 @@ sub call
 	{
 	    # Assume this is a transport error, go to sleep before
 	    # trying again
-	    $plugin->warning(
-			    "Problem connecting to the WoS server: \n" . $@ . ".\nWaiting " . $plugin->{net_retry}->{interval} .
-			      " seconds before trying again." );
+	    $plugin->warning( "Problem connecting to the WoS server: \n" .
+			      $@ . ".\nWaiting " . $plugin->{net_retry}->{interval} . " seconds before trying again." );
 	    sleep( $plugin->{net_retry}->{interval} );
 	    $som = undef;
 	};

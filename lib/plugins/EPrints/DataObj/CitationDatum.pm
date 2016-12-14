@@ -45,41 +45,41 @@ sub get_system_field_info
 
     return (
 	# unique id
-	{  name=>"datumid",
-	   type=>"counter",
-	   sql_counter=>"datumid",
-	   required=>1,
+	{  name        => "datumid",
+	   type        => "counter",
+	   sql_counter => "datumid",
+	   required    => 1,
 	},
 
 	# source
-	{  name=>"source",
-	   type=>"set",
-	   options=>[ qw/ scopus wos gscholar / ],
-	   required=>1,
+	{  name     => "source",
+	   type     => "set",
+	   options  => [ qw/ scopus wos gscholar / ],
+	   required => 1,
 	},
 
 	# the eprint to which this datum refers
-	{  name=>"referent_id",
-	   type=>"int",
-	   required=>1,
+	{  name     => "referent_id",
+	   type     => "int",
+	   required => 1,
 	},
 
 	# datestamp
-	{  name=>"datestamp",
-	   type=>"time",
-	   required=>1,
+	{  name     => "datestamp",
+	   type     => "time",
+	   required => 1,
 	},
 
 	# number of times cited
-	{  name=>"impact",
-	   type=>"int",
-	   required=>0,
+	{  name     => "impact",
+	   type     => "int",
+	   required => 0,
 	},
 
 	# the data source's id for this record
-	{  name=>"cluster",
-	   type=>"id",
-	   required=>0,
+	{  name     => "cluster",
+	   type     => "id",
+	   required => 0,
 	},
     );
 

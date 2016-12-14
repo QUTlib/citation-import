@@ -101,10 +101,10 @@ sub input_text_fh
     $plugin->dispose;
 
     return
-      EPrints::List->new( dataset=>$opts{dataset},
-			  session=>$plugin->{session},
-			  ids=>$ids
-			);
+      EPrints::List->new( dataset => $opts{dataset},
+			  session => $plugin->{session},
+			  ids     => $ids
+      );
 }
 
 #
@@ -125,10 +125,10 @@ sub process_eprint_dataset
     $plugin->dispose;
 
     return
-      EPrints::List->new( dataset=>$opts{dataset},
-			  session=>$plugin->{session},
-			  ids=>$ids
-			);
+      EPrints::List->new( dataset => $opts{dataset},
+			  session => $plugin->{session},
+			  ids     => $ids
+      );
 
 }
 

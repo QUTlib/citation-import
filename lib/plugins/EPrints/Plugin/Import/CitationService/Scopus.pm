@@ -202,9 +202,8 @@ sub get_epdata
 	    }
 	    if( $status_code || $status_detail )
 	    {
-		$plugin->error(
-			      "Scopus responded with error condition for EPrint ID $eprintid: $status_code, " . $status_detail .
-				', Request URL: ' . $quri->as_string );
+		$plugin->error( "Scopus responded with error condition for EPrint ID $eprintid: $status_code, " .
+				$status_detail . ', Request URL: ' . $quri->as_string );
 		next QUERY_METHOD;
 	    }
 	    else
@@ -221,8 +220,8 @@ sub get_epdata
 	    # specific to a given eprint and dying would prevent
 	    # updates for the remaining eprints
 	    ( $status_code, $status_detail ) = $plugin->get_response_status( $response_xml );
-	    $plugin->error( "Scopus responded with error condition for EPrint ID $eprintid: $status_code, " . $status_detail .
-			    ', Request URL: ' . $quri->as_string );
+	    $plugin->error( "Scopus responded with error condition for EPrint ID $eprintid: $status_code, " .
+			    $status_detail . ', Request URL: ' . $quri->as_string );
 	    next QUERY_METHOD;
 	}
 
@@ -367,7 +366,7 @@ sub get_number_matches
     my $totalResults = $response_xml->getElementsByTagNameNS( $NS_OPENSEARCH, "totalResults" )->[ 0 ];
 
     return 0 if !defined $totalResults;
-    return $totalResults->textContent;
+    return $totalResults->textContent + 0;
 }
 
 #
@@ -385,9 +384,9 @@ sub response_to_epdata
     my $eid = shift @{ $record->getElementsByLocalName( "eid" ) };
 
     my $citation_count = shift @{ $record->getElementsByLocalName( "citedby-count" ) };
-    return { cluster=>$eid->textContent,
-	     impact=>$citation_count->textContent
-	   };
+    return { cluster => $eid->textContent,
+	     impact  => $citation_count->textContent
+    };
 }
 
 #
@@ -414,9 +413,8 @@ sub _call
 	if( !$response->is_success )
 	{
 	    # no response; go to sleep before trying again
-	    $plugin->warning(
-		'Unable to retrieve data from Scopus. The response was: ' . $response->status_line . "Waiting " . $retry_delay .
-		  " seconds before trying again." );
+	    $plugin->warning( 'Unable to retrieve data from Scopus. The response was: ' .
+			      $response->status_line . "Waiting " . $retry_delay . " seconds before trying again." );
 	    sleep( $retry_delay );
 	    $net_tries_left--;
 	    $response = undef;
@@ -453,10 +451,10 @@ sub _get_query_uri
     my( $plugin, $search ) = @_;
 
     my $quri = $SEARCHAPI->clone;
-    $quri->query_form( httpAccept=>'application/xml',
-		       apiKey=>$plugin->{dev_id},
-		       query=>$search,
-		     );
+    $quri->query_form( httpAccept => 'application/xml',
+		       apiKey     => $plugin->{dev_id},
+		       query      => $search,
+    );
     return $quri;
 }
 
