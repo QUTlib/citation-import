@@ -55,9 +55,8 @@ sub new
 	# create an instance of WWW::Mechanize::Sleepy
 	if( EPrints::Utils::require_if_exists( "WWW::Mechanize::Sleepy" ) )
 	{
-	    $self->{mech} = WWW::Mechanize::Sleepy->new( sleep=>'5..15',
-							 autocheck=>1,
-						       );
+	    $self->{mech} = WWW::Mechanize::Sleepy->new( sleep     => '5..15',
+							 autocheck => 1, );
 	    $self->{mech}->agent_alias( "Linux Mozilla" );    # Engage cloaking device!
 	}
 	else
@@ -174,16 +173,16 @@ sub response_to_epdata_with_id
 	my $cites = $2;
 	$cites =~ s/,//;
 
-	return { cluster=>$cluster_id,
-		 impact=>$cites,
-	       };
+	return { cluster => $cluster_id,
+		 impact  => $cites,
+	};
     }
     elsif( $body =~ /Your search did not match any articles/ )
     {
 	# no citations
-	return { cluster=>$cluster_id,
-		 impact=>0
-	       };
+	return { cluster => $cluster_id,
+		 impact  => 0
+	};
     }
     else
     {
@@ -206,7 +205,7 @@ sub response_to_epdata_no_id
     # get links that match the eprint's URL
     my $eprint_link = $eprint->get_url;
     $eprint_link =~ s/(\d+\/)/(?:archive\/0+)?$1/;
-    my $by_url = $response->find_link( url_regex=>qr/^$eprint_link/ );
+    my $by_url = $response->find_link( url_regex => qr/^$eprint_link/ );
 
     # get links that match the eprint's title
     my $title = $eprint->get_value( "title" );
@@ -218,7 +217,7 @@ sub response_to_epdata_no_id
     }
     $title_re =~ s/[^\w\s]/\.?/g;
     $title_re =~ s/\s+/(?:\\s|(?:<\\\/?b>))+/g;
-    my $by_title = $response->find_link( text_regex=>qr/^(?:<b>)?$title_re/i );
+    my $by_title = $response->find_link( text_regex => qr/^(?:<b>)?$title_re/i );
 
     # search the links for the citation count and cluster ID
     for( grep { defined $_ } $by_url, $by_title )
@@ -263,18 +262,17 @@ sub response_to_epdata_no_id
 
     # extract the citation count from the "cited by x" link (if no link, assume zero citations)
     my $cites = 0;
-    my $cites_link = $response->find_link( text_regex=>qr/Cited by \d+/,
-					   url_regex=>qr/\b$cluster_id\b/
-					 );
+    my $cites_link = $response->find_link( text_regex => qr/Cited by \d+/,
+					   url_regex  => qr/\b$cluster_id\b/ );
     if( $cites_link )
     {
 	$cites_link->text =~ /(\d+)/;
 	$cites = $1;
     }
 
-    return { cluster=>$cluster_id,
-	     impact=>$cites,
-	   };
+    return { cluster => $cluster_id,
+	     impact  => $cites,
+    };
 }
 
 1;
