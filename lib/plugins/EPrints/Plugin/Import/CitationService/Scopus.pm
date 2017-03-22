@@ -441,8 +441,8 @@ sub is_usable_doi
 
     return 0 if( !EPrints::Utils::is_set( $doi ) );
 
-    $doi =~ s!^http://(dx\.)?doi\.org/!!;
-    $doi =~ s!^doi:!!;
+    $doi =~ s!^https?://(dx\.)?doi\.org/!!i;
+    $doi =~ s!^doi:!!i;
 
     return 0 if( $doi !~ m!^10\.[^/]+/! );
 
