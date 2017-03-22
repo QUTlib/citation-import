@@ -406,10 +406,7 @@ sub _call
     my( $plugin, $uri, $max_retries, $retry_delay ) = @_;
 
     my $ua = LWP::UserAgent->new( conn_cache => $plugin->{conn_cache} );
-    if( EPrints::Utils::is_set( $ENV{http_proxy} ) )
-    {
-	$ua->proxy( 'http', $ENV{http_proxy} );
-    }
+    $ua->env_proxy;
 
     my $response       = undef;
     my $net_tries_left = $max_retries + 1;
