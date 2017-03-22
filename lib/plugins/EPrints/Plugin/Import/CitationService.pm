@@ -76,7 +76,7 @@ sub new
     $self->{produce} = [ 'list/citation', 'dataobj/citation' ];
     $self->{visible} = "api";
 
-    $self->{conn_cache} = LWP::ConnCache->new( total_capacity => undef );
+    $self->{conn_cache} = LWP::ConnCache->new;
 
     return $self;
 }
