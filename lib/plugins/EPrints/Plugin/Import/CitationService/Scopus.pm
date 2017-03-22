@@ -231,7 +231,7 @@ sub get_epdata
 
     return undef if( !$found_a_match );
 
-    return $plugin->response_to_epdata( $response_xml );
+    return $plugin->response_to_epdata( $response_xml, $eprint->get_value( "scopus_cluster" ) );
 }
 
 #
@@ -377,14 +377,21 @@ sub get_number_matches
 #
 sub response_to_epdata
 {
-    my( $plugin, $response_xml ) = @_;
+    my( $plugin, $response_xml, $fallback_cluster ) = @_;
 
     my $record = shift @{ $response_xml->getElementsByTagNameNS( $NS_ATOM, "entry" ) };
 
     my $eid = shift @{ $record->getElementsByLocalName( "eid" ) };
+    if( !defined $eid )
+    {
+	$plugin->error( "Scopus responded with no 'eid' in entry:\n" . $response_xml->toString );
+    }
+
+    my $cluster = $fallback_cluster;
+    eval { $cluster = $eid->textContent };
 
     my $citation_count = shift @{ $record->getElementsByLocalName( "citedby-count" ) };
-    return { cluster => $eid->textContent,
+    return { cluster => $cluster,
 	     impact  => $citation_count->textContent
     };
 }
@@ -398,11 +405,8 @@ sub _call
 {
     my( $plugin, $uri, $max_retries, $retry_delay ) = @_;
 
-    my $ua = LWP::UserAgent->new;
-    if( EPrints::Utils::is_set( $ENV{http_proxy} ) )
-    {
-	$ua->proxy( 'http', $ENV{http_proxy} );
-    }
+    my $ua = LWP::UserAgent->new( conn_cache => $plugin->{conn_cache} );
+    $ua->env_proxy;
 
     my $response       = undef;
     my $net_tries_left = $max_retries + 1;
@@ -437,10 +441,10 @@ sub is_usable_doi
 
     return 0 if( !EPrints::Utils::is_set( $doi ) );
 
-    $doi =~ s!^http://(dx\.)?doi\.org/!!;
-    $doi =~ s!^doi:!!;
+    $doi =~ s!^https?://(dx\.)?doi\.org/!!i;
+    $doi =~ s!^doi:!!i;
 
-    return 0 if( $doi !~ m!^10\.\d{4}/! );
+    return 0 if( $doi !~ m!^10\.[^/]+/! );
 
     # DOIs containing parentheses confuse Scopus because it uses them as delimiters
     return !( $doi =~ /[()]/ );

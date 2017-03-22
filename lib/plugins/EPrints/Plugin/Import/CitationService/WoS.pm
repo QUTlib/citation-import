@@ -200,6 +200,7 @@ sub get_epdata
     # set soapAction to an empty string
     $soap->on_action( sub { return ''; } );
     $soap->transport->http_request->header( "Cookie" => "SID=\"" . $plugin->{session_id} . "\";" );
+    $soap->transport->conn_cache( $plugin->{conn_cache} );
 
     # get the WoS identifier ("UT") for this eprint
     my $uid;

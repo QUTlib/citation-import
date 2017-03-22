@@ -61,6 +61,8 @@ our @ISA = ( "EPrints::Plugin::Import::TextFile" );
 # disable this plug-in because it is an abstract class
 $EPrints::Plugin::Import::CitationService::DISABLE = 1;
 
+use LWP::ConnCache;
+
 #
 # Create a new plug-in object.
 #
@@ -73,6 +75,8 @@ sub new
     # set some parameters that are common to all sub-classes
     $self->{produce} = [ 'list/citation', 'dataobj/citation' ];
     $self->{visible} = "api";
+
+    $self->{conn_cache} = LWP::ConnCache->new;
 
     return $self;
 }
