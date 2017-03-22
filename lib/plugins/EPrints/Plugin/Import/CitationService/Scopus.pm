@@ -231,7 +231,7 @@ sub get_epdata
 
     return undef if( !$found_a_match );
 
-    return $plugin->response_to_epdata( $response_xml );
+    return $plugin->response_to_epdata( $response_xml, $eprint->get_value( "scopus_cluster" ) );
 }
 
 #
@@ -377,14 +377,21 @@ sub get_number_matches
 #
 sub response_to_epdata
 {
-    my( $plugin, $response_xml ) = @_;
+    my( $plugin, $response_xml, $fallback_cluster ) = @_;
 
     my $record = shift @{ $response_xml->getElementsByTagNameNS( $NS_ATOM, "entry" ) };
 
     my $eid = shift @{ $record->getElementsByLocalName( "eid" ) };
+    if( !defined $eid )
+    {
+	$plugin->error( "Scopus responded with no 'eid' in entry:\n" . $response_xml->toString );
+    }
+
+    my $cluster = $fallback_cluster;
+    eval { $cluster = $eid->textContent };
 
     my $citation_count = shift @{ $record->getElementsByLocalName( "citedby-count" ) };
-    return { cluster => $eid->textContent,
+    return { cluster => $cluster,
 	     impact  => $citation_count->textContent
     };
 }
