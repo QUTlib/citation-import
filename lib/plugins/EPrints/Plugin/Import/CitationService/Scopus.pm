@@ -283,12 +283,54 @@ sub _get_query
 # couldn't be generated.
 #
 
+sub _get_quoted_param
+{
+    my( $plugin, $string, $exact ) = @_;
+
+    # Decompose ligatures into component characters - Scopus doesn't
+    # match ligatures. Note, this is a compatibility normalisation
+    # that changes characters and potentially this could change the
+    # string sufficiently so that Scopus won't find a match.
+    $string = NFKC( $string ) // '';
+
+    # If there are any non-letter (or number) characters, wrap the
+    # whole deal in quotes.  Just in case.
+    if( $string =~ /[^A-Z0-9/.-]/i )
+    {
+	if( $exact )
+	{
+	    $string = '{' . $string . '}';
+	}
+	else
+	{
+	    # Remove these because they break the query parser
+	    $string =~ s/[%&<>]/ /g;                    # percentages, ampersands
+	    $string =~ s/[\x{E2809C}\x{E2809D}]/ /g;    # various double quotation marks
+
+	    # Escape quotes
+	    $string =~ s/"/\\"/g;
+
+	    # Question marks and asterixes are both wildcard characters and
+	    # won't make a literal match or will break the parser if left in.
+	    # The workaround is to add one to the end of the querystring
+	    # wrapped in the curly brackets (the equivalent of escaping them)
+	    $suffix = '';
+	    $suffix .= '{?}' if( $string =~ s/[?]/ /g );
+	    $suffix .= '{*}' if( $string =~ s/[*]/ /g );
+
+	    $string = '"' . $string . '"' . $suffix;
+	}
+    }
+
+    return $string;
+}
+
 sub _get_querystring_eid
 {
     my( $plugin, $eprint ) = @_;
     return undef if(   !$eprint->is_set( 'scopus_cluster' )
 		     || $eprint->get_value( 'scopus_cluster' ) eq '-' );
-    return 'eid(' . $eprint->get_value( 'scopus_cluster' ) . ')';
+    return 'eid(' . $plugin->_get_quoted_param( $eprint->get_value( 'scopus_cluster' ), 1 ) . ')';
 }
 
 sub _get_querystring_doi
@@ -296,7 +338,7 @@ sub _get_querystring_doi
     my( $plugin, $eprint ) = @_;
     return undef if(    !$eprint->is_set( 'id_number' )
 		     || !is_usable_doi( $eprint->get_value( 'id_number' ) ) );
-    return 'doi(' . $eprint->get_value( 'id_number' ) . ')';
+    return 'doi(' . $plugin->_get_quoted_param( $eprint->get_value( 'id_number' ), 1 ) . ')';
 }
 
 sub _get_querystring_metadata
@@ -305,39 +347,20 @@ sub _get_querystring_metadata
 
     # search using title and first author
 
-    # Decompose ligatures into component characters - Scopus doesn't
-    # match ligatures. Note, this is a compatibility normalisation
-    # that changes characters and potentially this could change the
-    # title sufficiently so that Scopus won't find a match.
-    my $title = NFKC( $eprint->get_value( 'title' ) ) || '';
-
-    # Remove these because they break the query parser
-    $title =~ s/[%&<>]/ /g;                     # percentages, ampersands
-    $title =~ s/["\x{E2809C}\x{E2809D}]/ /g;    # various double quotation marks
-
-    $title .= "\"";                             # close the phrase search quotation marks
-
-    # Question marks and asterixes are both wildcard characters and
-    # won't make a literal match or will break the parser if left in.
-    # The workaround is to add one to the end of the querystring
-    # wrapped in the curly brackets (the equivalent of escaping them)
-    $title .= "{?}" if( $title =~ s/[?]/ /g );
-    $title .= "{*}" if( $title =~ s/[*]/ /g );
-
-    my $query = "title(\"$title)";
+    my $query = 'title(' . $plugin->_get_quoted_param( $eprint->get_value( 'title' ) ) . ')';
 
     my @authors = @{ $eprint->value( 'creators_name' ) || [] };
     if( scalar( @authors ) > 0 )
     {
 	my $authlastname = $authors[ 0 ]->{family};
-	$query .= " and authlastname($authlastname)";
+	$query .= ' AND authlastname(' . $plugin->_get_quoted_param( $authlastname ) . ')';
     }
 
     if( $eprint->is_set( 'date' ) )
     {
 	# limit by publication year
 	my $pubyear = substr( $eprint->get_value( 'date' ), 0, 4 );
-	$query .= " and pubyear is $pubyear";
+	$query .= " AND pubyear is $pubyear";
     }
 
     return $query;
