@@ -311,20 +311,11 @@ sub _get_querystring_metadata
     # title sufficiently so that Scopus won't find a match.
     my $title = NFKC( $eprint->get_value( 'title' ) ) || '';
 
-    # Remove these because they break the query parser
-    $title =~ s/[%&<>]/ /g;                     # percentages, ampersands
-    $title =~ s/["\x{E2809C}\x{E2809D}]/ /g;    # various double quotation marks
+    # remove all non-letters/numbers, since they're ignored anyway
+    # http://api.elsevier.com/documentation/search/SCOPUSSearchTips.htm
+    $title =~ s/[^\pL\pN]/ /g;
 
-    $title .= "\"";                             # close the phrase search quotation marks
-
-    # Question marks and asterixes are both wildcard characters and
-    # won't make a literal match or will break the parser if left in.
-    # The workaround is to add one to the end of the querystring
-    # wrapped in the curly brackets (the equivalent of escaping them)
-    $title .= "{?}" if( $title =~ s/[?]/ /g );
-    $title .= "{*}" if( $title =~ s/[*]/ /g );
-
-    my $query = "title(\"$title)";
+    my $query = "title(\"$title\")";
 
     my @authors = @{ $eprint->value( 'creators_name' ) || [] };
     if( scalar( @authors ) > 0 )
