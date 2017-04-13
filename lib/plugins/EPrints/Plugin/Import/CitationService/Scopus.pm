@@ -469,8 +469,7 @@ sub is_usable_doi
 
     return 0 if( $doi !~ m!^10\.[^/]+/! );
 
-    # DOIs containing parentheses confuse Scopus because it uses them as delimiters
-    return !( $doi =~ /[()]/ );
+    return 1;
 }
 
 sub _get_query_uri
