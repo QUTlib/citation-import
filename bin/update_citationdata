@@ -66,8 +66,7 @@ The ID of the EPrint repository to import to.
 
 =item I<source>
 
-The source from which to import data. This may be one of I<scopus>, I<wos>
-or I<gscholar>.
+The source from which to import data. This may be one of I<scopus> or I<wos>.
 
 =item I<date>
 

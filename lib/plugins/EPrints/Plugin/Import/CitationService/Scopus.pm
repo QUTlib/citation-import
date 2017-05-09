@@ -9,7 +9,7 @@ package EPrints::Plugin::Import::CitationService::Scopus;
 #
 ###############################################################################
 #
-# Copyright 2015 Queensland University of Technology. All Rights Reserved.
+# Copyright 2017 Queensland University of Technology. All Rights Reserved.
 #
 #  This file is part of the Citation Count Dataset and Import Plug-ins for GNU
 #  EPrints 3.
@@ -29,6 +29,12 @@ package EPrints::Plugin::Import::CitationService::Scopus;
 #  You should have received a copy of the GNU General Public License
 #  along with EPrints 3; if not, write to the Free Software
 #  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+#
+######################################################################
+#
+# October 2017 / Matty K:
+#
+# - improved query parameterisation, timeouts, etc.
 #
 ######################################################################
 #
