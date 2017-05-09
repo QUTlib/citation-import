@@ -295,7 +295,7 @@ sub _get_quoted_param
 
     # If there are any "unsimple" characters, wrap the whole deal
     # in quotes.  Just in case.
-    if( $string =~ /[^A-Z0-9/.-]/i )
+    if( $string =~ /[^A-Z0-9\/.-]/i )
     {
 	# Experimentation shows that percent signs cause a GENERAL_SYSTEM_ERROR
 	# in the server.  In that case, return a best-effort (non-exact) query
