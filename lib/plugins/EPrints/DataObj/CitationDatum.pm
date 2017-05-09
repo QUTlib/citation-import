@@ -54,7 +54,7 @@ sub get_system_field_info
 	# source
 	{  name     => "source",
 	   type     => "set",
-	   options  => [ qw/ scopus wos gscholar / ],
+	   options  => [ qw/ scopus wos / ],
 	   required => 1,
 	},
 

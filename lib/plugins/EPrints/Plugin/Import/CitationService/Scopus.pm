@@ -9,7 +9,7 @@ package EPrints::Plugin::Import::CitationService::Scopus;
 #
 ###############################################################################
 #
-# Copyright 2015 Queensland University of Technology. All Rights Reserved.
+# Copyright 2017 Queensland University of Technology. All Rights Reserved.
 #
 #  This file is part of the Citation Count Dataset and Import Plug-ins for GNU
 #  EPrints 3.
@@ -29,6 +29,12 @@ package EPrints::Plugin::Import::CitationService::Scopus;
 #  You should have received a copy of the GNU General Public License
 #  along with EPrints 3; if not, write to the Free Software
 #  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+#
+######################################################################
+#
+# October 2017 / Matty K:
+#
+# - improved query parameterisation, timeouts, etc.
 #
 ######################################################################
 #
@@ -94,6 +100,13 @@ sub new
 	$self->{error}   = 'Unable to load the Scopus developer key.';
 	$self->{disable} = 1;
 	return $self;
+    }
+
+    # other network configuration
+    my $net_retry = $self->{session}->get_conf( "scapi", "net_retry" );
+    if( defined( $net_retry ) && ref( $net_retry ) eq "HASH" )
+    {
+	$self->{net_retry} = $net_retry;
     }
 
     # An ordered list of the methods for generating querystrings
@@ -438,6 +451,7 @@ sub _call
 
     my $ua = LWP::UserAgent->new( conn_cache => $plugin->{conn_cache} );
     $ua->env_proxy;
+    $ua->timeout( 15 );
 
     my $response       = undef;
     my $net_tries_left = $max_retries + 1;

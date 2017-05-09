@@ -10,17 +10,6 @@ push @{ $c->{fields}->{eprint} },
 
 ####### included in defaultcfg/cfg.d/eprints_fields.pl (N.B. without the render_style => 'short')
 
-#	{  'name'     => 'gscholar',
-#	   'type'     => 'compound',
-#	   'volatile' => 1,
-#	   'fields'   => [
-#			 { 'sub_name' => 'impact',    'type' => 'int', },
-#			 { 'sub_name' => 'cluster',   'type' => 'id', },
-#			 { 'sub_name' => 'datestamp', 'type' => 'time', 'render_style' => 'short', },
-#	   ],
-#	   'sql_index' => 0,
-#	},
-
 	  { 'name'     => 'scopus',
 	    'type'     => 'compound',
 	    'volatile' => 1,
@@ -44,62 +33,6 @@ push @{ $c->{fields}->{eprint} },
 	  },
 
 	  #];
-
-##########################################
-# From citation-import cfg.d/gscholar.pl #
-##########################################
-
-###############################################################################
-#
-# Google Scholar search configuration.
-#
-###############################################################################
-$c->{gscholar} = {};
-
-#
-# The base URI for Google Scholar. You may prefer to use a local mirror.
-#
-$c->{gscholar}->{uri} = URI->new( "http://scholar.google.com/scholar" );
-
-#
-# Build a search for papers that cite a known cluster ID
-#
-$c->{gscholar}->{search_cites} = sub {
-    my( $eprint ) = @_;
-
-    my $quri = $eprint->repository->config( "gscholar", "uri" )->clone;
-    $quri->query_form( cites => $eprint->get_value( "gscholar_cluster" ) );
-
-    return $quri;
-};
-
-#
-# Build a search for a paper using title and author
-#
-$c->{gscholar}->{search_title} = sub {
-    my( $eprint ) = @_;
-
-    my $quri = $eprint->repository->config( "gscholar", "uri" )->clone;
-    my $q = "";
-
-    # get the title and encode it for Google
-    my $title = $eprint->get_value( "title" );
-    $title =~ s/[^\p{Latin}\p{Number}]/ /g;
-    utf8::encode( $title );
-    $q = "intitle:\"$title\"";
-
-    # get the creators' name and encode it for Google
-    if( $eprint->is_set( "creators_name" ) )
-    {
-	my $creator = ( @{ $eprint->get_value( "creators_name" ) } )[ 0 ];
-	$creator = substr( $creator->{given}, 0, 1 ) . "-" . $creator->{family};
-	utf8::encode( $creator );
-	$q .= " author:$creator";
-    }
-    $quri->query_form( q => $q );
-
-    return $quri;
-};
 
 #######################################
 # From citation-import cfg.d/scapi.pl #
@@ -225,7 +158,6 @@ $c->{datasets}->{citation} = { class     => "EPrints::DataObj::CitationDatum",
 			       datestamp => "datestamp",
 			       pluginmap => { scopus   => "Import::CitationService::Scopus",
 					      wos      => "Import::CitationService::WoS",
-					      gscholar => "Import::CitationService::GScholar",
 			       },
 };
 
@@ -249,17 +181,6 @@ $c->{datasets}->{wos} = { class            => "EPrints::DataObj::CitationDatum",
 			  datestamp        => "datestamp",
 			  virtual          => 1,
 			  import           => 1,
-};
-
-# virtual dataset for Google Scholar data
-$c->{datasets}->{gscholar} = { class            => "EPrints::DataObj::CitationDatum",
-			       sqlname          => "citation",
-			       confid           => "citation",
-			       dataset_id_field => "source",
-			       filters          => [ { meta_fields => [ 'source' ], value => 'gscholar', describe => 0 } ],
-			       datestamp        => "datestamp",
-			       virtual          => 1,
-			       import           => 1,
 };
 
 # when we receive new citation data, cache it in the eprint object to which it refers

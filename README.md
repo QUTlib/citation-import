@@ -22,14 +22,7 @@ listed below for the details for each service.
   Access to Web Services Premium is automatic once you are subscribed to Web
   of Science and InCites. Note: Web Services Lite is not supported by the
   plugins as it no longer provides citation data.
-
-### Google Scholar (NOT SUPPORTED):
-
-  The Google Scholar plug-in is a screen-scraper based on the
-  Export::GScholar plug-in shipped with EPrints 3.2. See
-  http://scholar.google.com/intl/en/scholar/about.html. Google's full
   terms of use are at http://www.google.com/accounts/TOS. This plugin
-  is not actively maintained.
 
 
 Installation
@@ -115,7 +108,7 @@ Contributors
 The citation count import plug-ins were developed by the Library eServices
 Applications and Development Team at the Queensland University of Technology
 in Brisbane, Australia.
-For more about us, see https://www.library.qut.edu.au.
+For more about us, see https://www.library.qut.edu.au/.
 
 Maintainer:
 
@@ -133,7 +126,7 @@ Updates:
 Copyright
 ---------
 
-Copyright (c) 2011-2016 Queensland University of Technology, Queensland, Australia
+Copyright (c) 2011-2017 Queensland University of Technology, Queensland, Australia
 
 The plug-ins are free software; you can redistribute them and/or modify
 them under the terms of the GNU General Public License as published by
@@ -151,6 +144,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 Changelog
 ---------
+
+- May 2017 (phluid61)
+
+    * Scopus: improved search parameterisation
+    * Removed old GScholar code
 
 - October 2015 (phluid61)
 
