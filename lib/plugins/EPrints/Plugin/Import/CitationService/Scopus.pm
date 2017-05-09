@@ -96,6 +96,13 @@ sub new
 	return $self;
     }
 
+    # other network configuration
+    my $net_retry = $self->{session}->get_conf( "scapi", "net_retry" );
+    if( defined( $net_retry ) && ref( $net_retry ) eq "HASH" )
+    {
+	$self->{net_retry} = $net_retry;
+    }
+
     # An ordered list of the methods for generating querystrings
     $self->{queries} = [
 	qw{
