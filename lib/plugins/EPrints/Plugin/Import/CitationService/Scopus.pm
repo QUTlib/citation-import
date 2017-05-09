@@ -445,6 +445,7 @@ sub _call
 
     my $ua = LWP::UserAgent->new( conn_cache => $plugin->{conn_cache} );
     $ua->env_proxy;
+    $ua->timeout( 15 );
 
     my $response       = undef;
     my $net_tries_left = $max_retries + 1;
