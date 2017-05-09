@@ -293,32 +293,40 @@ sub _get_quoted_param
     # string sufficiently so that Scopus won't find a match.
     $string = NFKC( $string ) // '';
 
-    # If there are any non-letter (or number) characters, wrap the
-    # whole deal in quotes.  Just in case.
+    # If there are any "unsimple" characters, wrap the whole deal
+    # in quotes.  Just in case.
     if( $string =~ /[^A-Z0-9/.-]/i )
     {
-	if( $exact )
+	# Experimentation shows that percent signs cause a GENERAL_SYSTEM_ERROR
+	# in the server.  In that case, return a best-effort (non-exact) query
+	# that strips them as punctuation.
+	#
+	# Similary, ampersands seem to be unsearchable, and are handled explicitly
+	# when creating a non-exact query (below).
+	#
+	if( $exact && $string !~ /{}%&/ )
 	{
 	    $string = '{' . $string . '}';
 	}
 	else
 	{
-	    # Remove these because they break the query parser
-	    $string =~ s/[%&<>]/ /g;                    # percentages, ampersands
-	    $string =~ s/[\x{E2809C}\x{E2809D}]/ /g;    # various double quotation marks
+	    # When searching for a loose or approximate phrase (using double-quotation
+	    # marks) punctuation is ignored.
+	    #   <http://api.elsevier.com/documentation/search/SCOPUSSearchTips.htm>
+	    #
+	    # Experimentation shows that ampersands are often replaced with the word
+	    # 'and' in stored metadata, but in some cases (e.g. "S&P 500") they are an
+	    # integral part of the token.  Our best effort in this case is to explode
+	    # the string on all words-that-include-ampersands.
+	    #   e.g: ("a x&y b & c") => ("a" "b c")
 
-	    # Escape quotes
-	    $string =~ s/"/\\"/g;
+	    $string =~ s/[^\pL\pN&]+/ /g;        # strip all punctuation, except '&'
 
-	    # Question marks and asterixes are both wildcard characters and
-	    # won't make a literal match or will break the parser if left in.
-	    # The workaround is to add one to the end of the querystring
-	    # wrapped in the curly brackets (the equivalent of escaping them)
-	    $suffix = '';
-	    $suffix .= '{?}' if( $string =~ s/[?]/ /g );
-	    $suffix .= '{*}' if( $string =~ s/[*]/ /g );
+	    $string =~ s/(^| )&( |$)/ /g;        # isolated ampersands can be removed
+	    $string =~ s/\S*&\S*/" "/g;          # explode tokens with ampersands in them
+	    $string =~ s/^( ?"")? | ("" ?)?$//g; # clean up
 
-	    $string = '"' . $string . '"' . $suffix;
+	    $string = '"' . $string . '"';
 	}
     }
 
