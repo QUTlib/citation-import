@@ -32,7 +32,13 @@ package EPrints::Plugin::Import::CitationService::Scopus;
 #
 ######################################################################
 #
-# October 2017 / Matty K:
+# June 2017 / Matty K:
+#
+# - handle API error responses better (#26)
+#
+######################################################################
+#
+# October 2016 / Matty K:
 #
 # - improved query parameterisation, timeouts, etc.
 #
@@ -185,7 +191,7 @@ sub get_epdata
 	{
 	    # The server is not responding or there is a transport
 	    # error, give up
-	    die( "No response from Scopus after " . $plugin->{net_retry}->{max} . " attempts. Giving up." );
+	    die( "Aborting Scopus citation imports." );
 	}
 
 	# Got a response, now try to parse it
@@ -440,6 +446,40 @@ sub response_to_epdata
     };
 }
 
+
+sub _log_response
+{
+    my( $plugin, $uri, $response ) = @_;
+
+    my $message = 'Unable to retrieve data from Scopus. ';
+
+    # Set by LWP::UserAgent if the error happens client-side (e.g. while connecting)
+    my $client_warning = $response->header('Client-Warning');
+    if( $client_warning && $client_warning eq 'Internal response' )
+    {
+	$message .= 'Failed with status: ';
+    }
+    else
+    {
+	$message .= 'The response was: ';
+    }
+
+    # Always include the '400 Bad Request' line, or whatever it says
+    $message .= $response->status_line;
+
+    # Set by LWP::UserAgent if the callback die()ed.
+    my $reason = $response->header('X-Died');
+    if( $reason )
+    {
+	$message .= " ($reason)";
+    }
+
+    # Add the actual URI, for debugging purposes.
+    $message .= " [$uri]";
+
+    $plugin->warning( $message );
+}
+
 #
 # Make an HTTP GET request to $uri and return the response. Will retry
 # up to $max_retries times after $retry_delay in the event of a
@@ -459,14 +499,32 @@ sub _call
     {
 	$response = $ua->get( $uri );
 
+	# Quota exceeded - abort
+	if( $response->status == 429 )
+	{
+	    $plugin->_log_response( $uri, $response );
+	    return undef;
+	}
+
+	# Some other failure.  Log it, wait a bit, and try again.
 	if( !$response->is_success )
 	{
-	    # no response; go to sleep before trying again
-	    $plugin->warning( 'Unable to retrieve data from Scopus. The response was: ' .
-			      $response->status_line . "Waiting " . $retry_delay . " seconds before trying again." );
-	    sleep( $retry_delay );
+	    # TODO: explicitly handle responses
+	    #   400 - invalid information (?)
+	    #   401 - authentication error
+	    #   403 - bad auth/entitlements
+	    #   405 - invalid HTTP method !?
+	    #   406 - invalid content-type !?
+	    #   429 - (handled above)
+	    #   500 - (probably transient) ??
+	    $plugin->_log_response( $uri, $response );
 	    $net_tries_left--;
-	    $response = undef;
+	    if( $net_tries_left > 0 && $retry_delay > 0 )
+	    {
+		# go to sleep before trying again
+		$plugin->warning( "Waiting $retry_delay seconds before trying again." );
+		sleep( $retry_delay );
+	    }
 	}
     }
     return $response;
