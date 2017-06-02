@@ -500,7 +500,7 @@ sub _call
 	$response = $ua->get( $uri );
 
 	# Quota exceeded - abort
-	if( $response->status == 429 )
+	if( $response->code == 429 )
 	{
 	    $plugin->_log_response( $uri, $response );
 	    return undef;
