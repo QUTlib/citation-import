@@ -108,13 +108,6 @@ sub new
 	return $self;
     }
 
-    # other network configuration
-    my $net_retry = $self->{session}->get_conf( "scapi", "net_retry" );
-    if( defined( $net_retry ) && ref( $net_retry ) eq "HASH" )
-    {
-	$self->{net_retry} = $net_retry;
-    }
-
     # An ordered list of the methods for generating querystrings
     $self->{queries} = [
 	qw{
@@ -452,6 +445,15 @@ sub response_to_epdata
 
     my $cluster = $fallback_cluster;
     eval { $cluster = $eid->textContent };
+
+    if( $fallback_cluster && $cluster ne $fallback_cluster )
+    {
+	# This is a fatal error -- either we have the wrong eid stored in the database,
+	# or Scopus returned citation counts for the wrong record.  Either way, manual
+	# intervention will be required.
+	$plugin->error( "Scopus returned an 'eid' {$cluster} that doesn't match the existing one {$fallback_cluster}" );
+	return undef;
+    }
 
     my $citation_count = shift @{ $record->getElementsByLocalName( "citedby-count" ) };
     return { cluster => $cluster,

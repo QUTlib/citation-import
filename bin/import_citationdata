@@ -125,8 +125,8 @@ use EPrints::LogHandler;
 # Set default parameters
 #
 my $logfile            = undef;
-my $net_retry_max      = 4;
-my $net_retry_interval = 900;
+my $net_retry_max      = undef;
+my $net_retry_interval = undef;
 my $verbose            = 0;
 my $quiet              = 0;
 my $help               = 0;
@@ -211,6 +211,10 @@ if( !defined( $handler ) )
 }
 if( defined( $pluginmap ) && exists( $pluginmap->{$datasetid} ) )
 {
+    my $net_retry = $session->get_conf( "scapi", "net_retry" );
+    $net_retry_max      //= ( $net_retry->{'max'} // 4 );
+    $net_retry_interval //= ( $net_retry->{'interval'} // 30 );
+
     $plugin = $session->plugin( $pluginmap->{$datasetid},
 				Handler=>$handler,
 				net_retry=>{ max=>$net_retry_max,
