@@ -189,58 +189,71 @@ sub get_epdata
 
 	if( !defined( $response ) )
 	{
-	    # The server is not responding or there is a transport
-	    # error, give up
+	    # Out of quota. Give up!
 	    die( "Aborting Scopus citation imports." );
+	}
+
+	my $body = $response->content;
+	my $code = $response->code;
+	if( !$body )
+	{
+	    $plugin->warning( "No or empty response from Scopus for EPrint ID $eprintid [$code]" );
+	    next QUERY_METHOD;
 	}
 
 	# Got a response, now try to parse it
 	my $xml_parser = $plugin->{session}->xml;
 
-	# Workaround for malformed XML error responses part 1
-	my $status_code   = '-';
-	my $status_detail = '-';
+	my $status_code;
+	my $status_detail;
 
-	# End workaround part 1
 	eval {
-	    $response_xml = $xml_parser->parse_string( $response->content );
+	    $response_xml = $xml_parser->parse_string( $body );
 	    1;
-	  }
-	  or do
+	}
+	or do
 	{
-	    # Workaround for malformed XML error responses part 2 --
-	    # parse out the status code and detail using regex's
-	    $plugin->warning( "Received malformed XML error response" );
-	    if( $response->content =~ m/<statusCode[^>]*>([^<]+)<\/statusCode>/g )
+	    # Workaround for malformed XML error responses --
+	    # parse out the status code and detail using regexes
+	    $plugin->warning( "Received malformed XML error response {$@}" );
+	    if( $body =~ m/<statusCode[^>]*>(.+?)<\/statusCode>/g )
 	    {
 		$status_code = $1;
 	    }
-	    if( $response->content =~ m/<statusText[^>]*>([^<]+)<\/statusText>/g )
+	    if( $body =~ m/<statusText[^>]*>(.+?)<\/statusText>/g )
 	    {
 		$status_detail = $1;
 	    }
 	    if( $status_code || $status_detail )
 	    {
-		$plugin->error( "Scopus responded with error condition for EPrint ID $eprintid: $status_code, " .
-				$status_detail . ', Request URL: ' . $quri->as_string );
-		next QUERY_METHOD;
+		$status_code   ||= '-';
+		$status_detail ||= '-';
+		$plugin->error( "Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: " . $quri->as_string );
 	    }
 	    else
 	    {
-		# End workaround part 2
-		$plugin->warning( "Unable to parse response XML: \n" . $@ . ": " . $response->content );
-		die( 'Unable to parse response' );
+		$plugin->warning( "Unable to parse response XML for EPrint ID $eprintid: [$code] Request URL: ". $quri->as_string . "\n$body" );
 	    }
+	    next QUERY_METHOD;
 	};
 
-	if( $response->code != 200 )
+	if( $code != 200 )
 	{
 	    # Don't die on errors because these may be caused by data
 	    # specific to a given eprint and dying would prevent
 	    # updates for the remaining eprints
 	    ( $status_code, $status_detail ) = $plugin->get_response_status( $response_xml );
-	    $plugin->error( "Scopus responded with error condition for EPrint ID $eprintid: $status_code, " .
-			    $status_detail . ', Request URL: ' . $quri->as_string );
+	    if( $status_code || $status_detail )
+	    {
+		$status_code   ||= '-';
+		$status_detail ||= '-';
+		$plugin->error( "Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: " . $quri->as_string );
+	    }
+	    else
+	    {
+		$plugin->error( "Scopus responded with unknown error condition for EPrint ID $eprintid: [$code] Request URL: " .
+				$quri->as_string . "\n" . $response_xml->toString );
+	    }
 	    next QUERY_METHOD;
 	}
 
@@ -434,7 +447,7 @@ sub response_to_epdata
     my $eid = shift @{ $record->getElementsByLocalName( "eid" ) };
     if( !defined $eid )
     {
-	$plugin->error( "Scopus responded with no 'eid' in entry:\n" . $response_xml->toString );
+	$plugin->error( "Scopus responded with no 'eid' in entry, fallback='$fallback_cluster'. XML:\n" . $response_xml->toString );
     }
 
     my $cluster = $fallback_cluster;
@@ -445,7 +458,6 @@ sub response_to_epdata
 	     impact  => $citation_count->textContent
     };
 }
-
 
 sub _log_response
 {
