@@ -95,6 +95,11 @@ The default is "day".
 Log output to LOGFILE. If there is no log file, messages will be written to
 standard output.
 
+=item B<--bi-monthly>
+
+Schedule lookups over a two-month window, instead of the default one month.
+This may help large repositories avoid exceeding lookup quotas.
+
 =item B<--net-retry-max NUM>
 
 Re-try failed network requests up to NUM times (default 4).
