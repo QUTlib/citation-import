@@ -805,5 +805,5 @@ sub hpush (\%$)
 {
     my %h = shift;
     my $k = shift;
-    %h{ $k } = 1;
+    $h{ $k } = 1;
 }
