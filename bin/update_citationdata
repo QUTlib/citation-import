@@ -152,6 +152,13 @@ use File::Temp;
 use Getopt::Long;
 use Pod::Usage;
 
+sub hpush (\%$)
+{
+    my %h = shift;
+    my $k = shift;
+    $h{ $k } = 1;
+}
+
 #
 # Set default parameters
 #
@@ -801,11 +808,4 @@ sub test_eprint_selection_algorithm
 	print "Test failed at position $i.\n" if $session->{noise} > 0;
 	return 1;
     }
-}
-
-sub hpush (\%$)
-{
-    my %h = shift;
-    my $k = shift;
-    $h{ $k } = 1;
 }
