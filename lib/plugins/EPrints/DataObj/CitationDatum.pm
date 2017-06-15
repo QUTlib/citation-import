@@ -8,12 +8,12 @@ package EPrints::DataObj::CitationDatum;
 #
 ###############################################################################
 #
-# Copyright 2015 Queensland University of Technology. All Rights Reserved.
+# Copyright 2017 Queensland University of Technology. All Rights Reserved.
 #
 #  This file is part of the Citation Count Dataset and Import Plug-ins for GNU
 #  EPrints 3.
 #
-#  Copyright (c) 2015 Queensland University of Technology, Queensland, Australia
+#  Copyright (c) 2017 Queensland University of Technology, Queensland, Australia
 #
 #  The plug-ins are free software; you can redistribute them and/or modify
 #  them under the terms of the GNU General Public License as published by
