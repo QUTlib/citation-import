@@ -463,7 +463,8 @@ sub get_eprintids_for_day
 {
     my( $session, $dataset, $year, $month, $day ) = @_;
 
-    my $d1, $d2=0;
+    my $d1;
+    my $d2=0;
     if( $bimonthly )
     {
 	if( $month % 2 == 1)
@@ -510,7 +511,8 @@ sub get_eprintids_for_hour
 {
     my( $session, $dataset, $year, $month, $day, $hour ) = @_;
 
-    my $d1, $d2=0;
+    my $d1;
+    my $d2=0;
     if( $bimonthly )
     {
 	if( $month % 2 == 1)
