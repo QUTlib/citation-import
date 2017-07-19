@@ -152,11 +152,12 @@ use File::Temp;
 use Getopt::Long;
 use Pod::Usage;
 
-sub hpush (\%$)
+sub hpush (\%@)
 {
     my $h = shift;
-    my $k = shift;
-    $h->{ $k } = 1;
+    foreach (@_) {
+	$h->{$_} = 1;
+    }
 }
 
 #
