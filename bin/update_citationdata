@@ -156,7 +156,8 @@ use Pod::Usage;
 sub hpush (\%@)
 {
     my $h = shift;
-    foreach (@_) {
+    foreach( @_ )
+    {
 	$h->{$_} = 1;
     }
 }
@@ -190,7 +191,8 @@ GetOptions( 'period=s'=>\$period,
 	    'verbose+'=>\$verbose,
 	    'quiet'=>\$quiet,
 	    'test'=>\$test,
-	  ) || pod2usage( 2 );
+	  )
+  || pod2usage( 2 );
 
 #
 # Print out help screens, if desired
@@ -367,8 +369,8 @@ elsif( $period eq "hour" )
     # output the eprint IDs to the log
     if( $noise > 0 )
     {
-	print {$logfh} "Running update for " . Date::Calc::Date_to_Text( $update_year, $update_month, $update_day ) .
-	  " $update_hour:00:00 UTC.\n";
+	print {$logfh} "Running update for " .
+	  Date::Calc::Date_to_Text( $update_year, $update_month, $update_day ) . " $update_hour:00:00 UTC.\n";
 	if( scalar @ids > 0 )
 	{
 	    print {$logfh} "Scheduled EPrints: " . $ids[ 0 ] . " to " . $ids[ $cutoff ] . "\n";
@@ -474,10 +476,10 @@ sub get_eprintids_for_day
     my( $session, $dataset, $year, $month, $day ) = @_;
 
     my $d1;
-    my $d2=0;
+    my $d2 = 0;
     if( $bimonthly )
     {
-	if( $month % 2 == 1)
+	if( $month % 2 == 1 )
 	{
 	    # Jan Mar May Jul Sep Nov -- include next month
 	    $d1 = Date::Calc::Days_in_Month( $year, $month );
@@ -486,7 +488,7 @@ sub get_eprintids_for_day
 	else
 	{
 	    # Feb Apr Jun Aug Oct Dec -- include last month
-	    $month --;
+	    $month--;
 	    $d1 = Date::Calc::Days_in_Month( $year, $month );
 	    $d2 = Date::Calc::Days_in_Month( $year, $month + 1 );
 	    $day += $d1;
@@ -522,10 +524,10 @@ sub get_eprintids_for_hour
     my( $session, $dataset, $year, $month, $day, $hour ) = @_;
 
     my $d1;
-    my $d2=0;
+    my $d2 = 0;
     if( $bimonthly )
     {
-	if( $month % 2 == 1)
+	if( $month % 2 == 1 )
 	{
 	    # Jan Mar May Jul Sep Nov -- include next month
 	    $d1 = Date::Calc::Days_in_Month( $year, $month );
@@ -534,7 +536,7 @@ sub get_eprintids_for_hour
 	else
 	{
 	    # Feb Apr Jun Aug Oct Dec -- include last month
-	    $month --;
+	    $month--;
 	    $d1 = Date::Calc::Days_in_Month( $year, $month );
 	    $d2 = Date::Calc::Days_in_Month( $year, $month + 1 );
 	    $day += $d1;
@@ -698,7 +700,7 @@ sub test_eprint_selection_algorithm
     if( $bimonthly && $test_month % 2 == 0 )
     {
 	# Feb Apr Jun Aug Oct Dec -- start a month earlier
-	$test_month --;
+	$test_month--;
     }
 
     # build a list of the eprints to be updated, and sort into ascending order
@@ -718,7 +720,7 @@ sub test_eprint_selection_algorithm
 
 	if( $bimonthly )
 	{
-	    $test_month ++;
+	    $test_month++;
 	    $d = Date::Calc::Days_in_Month( $test_year, $test_month );
 	    for( my $test_day = 1 ; $test_day <= $d ; $test_day++ )
 	    {
@@ -759,13 +761,14 @@ sub test_eprint_selection_algorithm
 
 	if( $bimonthly )
 	{
-	    $test_month ++;
+	    $test_month++;
 	    $d = Date::Calc::Days_in_Month( $test_year, $test_month );
 	    for( my $test_day = 1 ; $test_day <= $d ; $test_day++ )
 	    {
 		for( my $test_hour = 0 ; $test_hour < 24 ; $test_hour++ )
 		{
-		    hpush %ids_update, get_eprintids_for_hour( $session, $dataset, $test_year, $test_month, $test_day, $test_hour );
+		    hpush %ids_update,
+		      get_eprintids_for_hour( $session, $dataset, $test_year, $test_month, $test_day, $test_hour );
 		    if( $test_day > 1 || $test_hour > 0 )
 		    {
 			hpush %ids_update,
