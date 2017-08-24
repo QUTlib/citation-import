@@ -203,8 +203,8 @@ sub get_epdata
 	eval {
 	    $response_xml = $xml_parser->parse_string( $body );
 	    1;
-	}
-	or do
+	  }
+	  or do
 	{
 	    # Workaround for malformed XML error responses --
 	    # parse out the status code and detail using regexes
@@ -221,11 +221,14 @@ sub get_epdata
 	    {
 		$status_code   ||= '-';
 		$status_detail ||= '-';
-		$plugin->error( "Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: " . $quri->as_string );
+		$plugin->error(
+"Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: "
+		      . $quri->as_string );
 	    }
 	    else
 	    {
-		$plugin->warning( "Unable to parse response XML for EPrint ID $eprintid: [$code] Request URL: ". $quri->as_string . "\n$body" );
+		$plugin->warning( "Unable to parse response XML for EPrint ID $eprintid: [$code] Request URL: " .
+				  $quri->as_string . "\n$body" );
 	    }
 	    next QUERY_METHOD;
 	};
@@ -240,7 +243,9 @@ sub get_epdata
 	    {
 		$status_code   ||= '-';
 		$status_detail ||= '-';
-		$plugin->error( "Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: " . $quri->as_string );
+		$plugin->error(
+"Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: "
+		      . $quri->as_string );
 	    }
 	    else
 	    {
@@ -345,11 +350,11 @@ sub _get_quoted_param
 	    # the string on all words-that-include-ampersands.
 	    #   e.g: ("a x&y b & c") => ("a" "b c")
 
-	    $string =~ s/[^\pL\pN&]+/ /g;        # strip all punctuation, except '&'
+	    $string =~ s/[^\pL\pN&]+/ /g;    # strip all punctuation, except '&'
 
-	    $string =~ s/(^| )&( |$)/ /g;        # isolated ampersands can be removed
-	    $string =~ s/\S*&\S*/" "/g;          # explode tokens with ampersands in them
-	    $string =~ s/^( ?"")? | ("" ?)?$//g; # clean up
+	    $string =~ s/(^| )&( |$)/ /g;           # isolated ampersands can be removed
+	    $string =~ s/\S*&\S*/" "/g;             # explode tokens with ampersands in them
+	    $string =~ s/^( ?"")? | ("" ?)?$//g;    # clean up
 
 	    $string = '"' . $string . '"';
 	}
@@ -440,7 +445,8 @@ sub response_to_epdata
     my $eid = shift @{ $record->getElementsByLocalName( "eid" ) };
     if( !defined $eid )
     {
-	$plugin->error( "Scopus responded with no 'eid' in entry, fallback='$fallback_cluster'. XML:\n" . $response_xml->toString );
+	$plugin->error(
+		    "Scopus responded with no 'eid' in entry, fallback='$fallback_cluster'. XML:\n" . $response_xml->toString );
     }
 
     my $cluster = $fallback_cluster;
@@ -468,7 +474,7 @@ sub _log_response
     my $message = 'Unable to retrieve data from Scopus. ';
 
     # Set by LWP::UserAgent if the error happens client-side (e.g. while connecting)
-    my $client_warning = $response->header('Client-Warning');
+    my $client_warning = $response->header( 'Client-Warning' );
     if( $client_warning && $client_warning eq 'Internal response' )
     {
 	$message .= 'Failed with status: ';
@@ -482,7 +488,7 @@ sub _log_response
     $message .= $response->status_line;
 
     # Set by LWP::UserAgent if the callback die()ed.
-    my $reason = $response->header('X-Died');
+    my $reason = $response->header( 'X-Died' );
     if( $reason )
     {
 	$message .= " ($reason)";
