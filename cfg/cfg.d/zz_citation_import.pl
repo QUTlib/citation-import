@@ -57,11 +57,6 @@ $c->{scapi}->{developer_id} = "";
 $c->{scapi}->{partner_id} = 65;
 
 #
-# The base URL for Scopus
-#
-$c->{scapi}->{uri} = URI->new( 'http://www.scopus.com' );
-
-#
 # Set retry count/delay for network issues
 #
 $c->{scapi}->{net_retry} = {
