@@ -134,6 +134,15 @@ sub new
 
     $self->{max_requests} ||= 10_000;
 
+    # Plugin-specific net_retry parameters (command line > config > default)
+    my $default_net_retry = $self->{session}->get_conf( 'wos', 'net_retry' );
+    $default_net_retry->{max} //= 4;
+    $default_net_retry->{interval} //= 900;
+    foreach my $k ( keys %{$default_net_retry} )
+    {
+	$self->{net_retry}->{$k} //= $default_net_retry->{$k};
+    }
+
     # this hash will hold the query parameters that are the same for every request
     $self->{query} = {};
 

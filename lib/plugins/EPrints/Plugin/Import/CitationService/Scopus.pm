@@ -118,6 +118,15 @@ sub new
     ];
     $self->{current_query} = -1;
 
+    # Plugin-specific net_retry parameters (command line > config > default)
+    my $default_net_retry = $self->{session}->get_conf( "scapi", "net_retry" );
+    $default_net_retry->{max} //= 4;
+    $default_net_retry->{interval} //= 30;
+    foreach my $k ( keys %{$default_net_retry} )
+    {
+	$self->{net_retry}->{$k} //= $default_net_retry->{$k};
+    }
+
     return $self;
 }
 

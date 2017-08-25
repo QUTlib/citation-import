@@ -212,15 +212,19 @@ if( !defined( $handler ) )
 }
 if( defined( $pluginmap ) && exists( $pluginmap->{$datasetid} ) )
 {
-    my $net_retry = $session->get_conf( "scapi", "net_retry" ); # FIXME: s/scapi/wos/ for $datasetid eq 'wos'
-    $net_retry_max      //= ( $net_retry->{'max'}      // 4 );
-    $net_retry_interval //= ( $net_retry->{'interval'} // 30 );
+    my $net_retry = {}; # any fallback values are handled in the plugin initializers
+    if( $net_retry_max )
+    {
+	$net_retry->{max} = $net_retry_max;
+    }
+    if( $net_retry_interval )
+    {
+	$net_retry->{interval} = $net_retry_interval;
+    }
 
     $plugin = $session->plugin( $pluginmap->{$datasetid},
 				Handler=>$handler,
-				net_retry=>{ max=>$net_retry_max,
-					     interval=>$net_retry_interval,
-					   },
+				net_retry=>$net_retry,
 			      );
     if( !defined( $plugin ) )
     {
