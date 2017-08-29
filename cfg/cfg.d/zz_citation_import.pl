@@ -65,6 +65,11 @@ $c->{scapi}->{net_retry} = {
 };
 
 #
+# The eprint field that holds (possible) DOIs.
+#
+#$c->{scapi}->{doi_field} = 'id_number';
+
+#
 # Build the "inward URL" for a paper. If we don't have an EID for this paper,
 # this just returns the URL of Scopus' home page
 #
