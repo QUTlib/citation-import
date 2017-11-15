@@ -6,7 +6,7 @@
 # Eprint fields for citation data. These must be included as elements in the
 #
 
-push @{ $c->{fields}->{eprint} },
+push @{ $c->{fields}->{eprint} }, (
 
 ####### included in defaultcfg/cfg.d/eprints_fields.pl (N.B. without the render_style => 'short')
 
@@ -32,7 +32,7 @@ push @{ $c->{fields}->{eprint} },
 	    'sql_index' => 0,
 	  },
 
-	  #];
+  );
 
 #######################################
 # From citation-import cfg.d/scapi.pl #
@@ -57,9 +57,12 @@ $c->{scapi}->{developer_id} = "";
 $c->{scapi}->{partner_id} = 65;
 
 #
-# The base URL for Scopus
+# Set retry count/delay for network issues
 #
-$c->{scapi}->{uri} = URI->new( 'http://www.scopus.com' );
+$c->{scapi}->{net_retry} = {
+    #max => 4,
+    #interval => 30,
+};
 
 #
 # Build the "inward URL" for a paper. If we don't have an EID for this paper,
@@ -77,7 +80,6 @@ $c->{scapi}->{get_uri_for_eprint} = sub {
     }
 
     return $uri;
-
 };
 
 #####################################

@@ -10,12 +10,12 @@
 #
 ###############################################################################
 #
-# Copyright 2015 Queensland University of Technology. All Rights Reserved.
+# Copyright 2017 Queensland University of Technology. All Rights Reserved.
 #
 #  This file is part of the Citation Count Dataset and Import Plug-ins for GNU
 #  EPrints 3.
 #
-#  Copyright (c) 2015 Queensland University of Technology, Queensland, Australia
+#  Copyright (c) 2017 Queensland University of Technology, Queensland, Australia
 #
 #  The plug-ins are free software; you can redistribute them and/or modify
 #  them under the terms of the GNU General Public License as published by
@@ -125,8 +125,8 @@ use EPrints::LogHandler;
 # Set default parameters
 #
 my $logfile            = undef;
-my $net_retry_max      = 4;
-my $net_retry_interval = 900;
+my $net_retry_max      = undef;
+my $net_retry_interval = undef;
 my $verbose            = 0;
 my $quiet              = 0;
 my $help               = 0;
@@ -143,7 +143,8 @@ GetOptions( 'log=s'=>\$logfile,
 	    'man'=>\$man,
 	    'verbose+'=>\$verbose,
 	    'quiet'=>\$quiet,
-	  ) || pod2usage( 2 );
+	  )
+  || pod2usage( 2 );
 
 #
 # Print out help screens, if desired
@@ -211,11 +212,19 @@ if( !defined( $handler ) )
 }
 if( defined( $pluginmap ) && exists( $pluginmap->{$datasetid} ) )
 {
+    my $net_retry = {}; # any fallback values are handled in the plugin initializers
+    if( $net_retry_max )
+    {
+	$net_retry->{max} = $net_retry_max;
+    }
+    if( $net_retry_interval )
+    {
+	$net_retry->{interval} = $net_retry_interval;
+    }
+
     $plugin = $session->plugin( $pluginmap->{$datasetid},
 				Handler=>$handler,
-				net_retry=>{ max=>$net_retry_max,
-					     interval=>$net_retry_interval,
-					   },
+				net_retry=>$net_retry,
 			      );
     if( !defined( $plugin ) )
     {

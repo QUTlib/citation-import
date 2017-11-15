@@ -8,12 +8,12 @@ package EPrints::Plugin::Import::CitationService::WoS;
 #
 ###############################################################################
 #
-# Copyright 2015 Queensland University of Technology. All Rights Reserved.
+# Copyright 2017 Queensland University of Technology. All Rights Reserved.
 #
 #  This file is part of the Citation Count Dataset and Import Plug-ins for GNU
 #  EPrints 3.
 #
-#  Copyright (c) 2015 Queensland University of Technology, Queensland, Australia
+#  Copyright (c) 2017 Queensland University of Technology, Queensland, Australia
 #
 #  The plug-ins are free software; you can redistribute them and/or modify
 #  them under the terms of the GNU General Public License as published by
@@ -133,6 +133,15 @@ sub new
     }
 
     $self->{max_requests} ||= 10_000;
+
+    # Plugin-specific net_retry parameters (command line > config > default)
+    my $default_net_retry = $self->{session}->get_conf( 'wos', 'net_retry' );
+    $default_net_retry->{max} //= 4;
+    $default_net_retry->{interval} //= 900;
+    foreach my $k ( keys %{$default_net_retry} )
+    {
+	$self->{net_retry}->{$k} //= $default_net_retry->{$k};
+    }
 
     # this hash will hold the query parameters that are the same for every request
     $self->{query} = {};

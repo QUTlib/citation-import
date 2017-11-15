@@ -9,12 +9,12 @@
 #
 ###############################################################################
 #
-# Copyright 2015 Queensland University of Technology. All Rights Reserved.
+# Copyright 2017 Queensland University of Technology. All Rights Reserved.
 #
 #  This file is part of the Citation Count Dataset and Import Plug-ins for GNU
 #  EPrints 3.
 #
-#  Copyright (c) 2015 Queensland University of Technology, Queensland, Australia
+#  Copyright (c) 2017 Queensland University of Technology, Queensland, Australia
 #
 #  The plug-ins are free software; you can redistribute them and/or modify
 #  them under the terms of the GNU General Public License as published by
@@ -95,6 +95,11 @@ The default is "day".
 Log output to LOGFILE. If there is no log file, messages will be written to
 standard output.
 
+=item B<--bi-monthly>
+
+Schedule lookups over a two-month window, instead of the default one month.
+This may help large repositories avoid exceeding lookup quotas.
+
 =item B<--net-retry-max NUM>
 
 Re-try failed network requests up to NUM times (default 4).
@@ -147,6 +152,17 @@ use File::Temp;
 use Getopt::Long;
 use Pod::Usage;
 
+## no critic
+sub hpush (\%@)
+{
+    my $h = shift;
+    foreach( @_ )
+    {
+	$h->{$_} = 1;
+    }
+}
+## use critic
+
 #
 # Set default parameters
 #
@@ -159,6 +175,7 @@ my $quiet              = 0;
 my $help               = 0;
 my $man                = 0;
 my $test               = 0;
+my $bimonthly          = 0;
 
 #
 # Parse the command line options
@@ -166,6 +183,7 @@ my $test               = 0;
 Getopt::Long::Configure( "permute" );
 GetOptions( 'period=s'=>\$period,
 	    'log=s'=>\$logfile,
+	    'bi-monthly|2'=>\$bimonthly,
 	    'net-retry-max=i'=>\$net_retry_max,
 	    'net-retry-interval=i'=>\$net_retry_interval,
 	    'help|?'=>\$help,
@@ -173,7 +191,8 @@ GetOptions( 'period=s'=>\$period,
 	    'verbose+'=>\$verbose,
 	    'quiet'=>\$quiet,
 	    'test'=>\$test,
-	  ) || pod2usage( 2 );
+	  )
+  || pod2usage( 2 );
 
 #
 # Print out help screens, if desired
@@ -276,7 +295,7 @@ if( $test )
 my $logfh;
 if( defined $logfile )
 {
-    if( !open( $logfh, ">>:utf8", $logfile ) )
+    if( !open( $logfh, ">>:encoding(UTF-8)", $logfile ) )
     {
 	print STDERR "Could not open $logfile: $!\n";
 	$session->terminate;
@@ -287,7 +306,7 @@ if( defined $logfile )
 }
 else
 {
-    open( $logfh, ">-:utf8" );
+    open( $logfh, ">&:encoding(UTF-8)", \*STDOUT );
 }
 
 #
@@ -350,8 +369,8 @@ elsif( $period eq "hour" )
     # output the eprint IDs to the log
     if( $noise > 0 )
     {
-	print {$logfh} "Running update for " . Date::Calc::Date_to_Text( $update_year, $update_month, $update_day ) .
-	  " $update_hour:00:00 UTC.\n";
+	print {$logfh} "Running update for " .
+	  Date::Calc::Date_to_Text( $update_year, $update_month, $update_day ) . " $update_hour:00:00 UTC.\n";
 	if( scalar @ids > 0 )
 	{
 	    print {$logfh} "Scheduled EPrints: " . $ids[ 0 ] . " to " . $ids[ $cutoff ] . "\n";
@@ -456,14 +475,38 @@ sub get_eprintids_for_day
 {
     my( $session, $dataset, $year, $month, $day ) = @_;
 
+    my $d1;
+    my $d2 = 0;
+    if( $bimonthly )
+    {
+	if( $month % 2 == 1 )
+	{
+	    # Jan Mar May Jul Sep Nov -- include next month
+	    $d1 = Date::Calc::Days_in_Month( $year, $month );
+	    $d2 = Date::Calc::Days_in_Month( $year, $month + 1 );
+	}
+	else
+	{
+	    # Feb Apr Jun Aug Oct Dec -- include last month
+	    $month--;
+	    $d1 = Date::Calc::Days_in_Month( $year, $month );
+	    $d2 = Date::Calc::Days_in_Month( $year, $month + 1 );
+	    $day += $d1;
+	}
+    }
+    else
+    {
+	$d1 = Date::Calc::Days_in_Month( $year, $month );
+    }
+
     # get all of the eprints to the end of the previous month
     my $list = get_eprints_before_month( $session, $dataset, $year, $month );
 
     # work which eprints are due for update today
     my $n           = $list->count;
-    my $d           = Date::Calc::Days_in_Month( $year, $month );
-    my $index_start = ( ( $day - 1 ) * $n ) / $d;
-    my $index_end   = ( $day * $n ) / $d - 1;
+    my $ndays       = $d1 + $d2;
+    my $index_start = ( ( $day - 1 ) * $n ) / $ndays;
+    my $index_end   = ( $day * $n ) / $ndays - 1;
     my $index_count = ( $index_end >= $index_start ) ? $index_end - $index_start + 1 : 1;
     my @ids         = @{ $list->ids( $index_start, $index_count ) };
 
@@ -480,15 +523,39 @@ sub get_eprintids_for_hour
 {
     my( $session, $dataset, $year, $month, $day, $hour ) = @_;
 
+    my $d1;
+    my $d2 = 0;
+    if( $bimonthly )
+    {
+	if( $month % 2 == 1 )
+	{
+	    # Jan Mar May Jul Sep Nov -- include next month
+	    $d1 = Date::Calc::Days_in_Month( $year, $month );
+	    $d2 = Date::Calc::Days_in_Month( $year, $month + 1 );
+	}
+	else
+	{
+	    # Feb Apr Jun Aug Oct Dec -- include last month
+	    $month--;
+	    $d1 = Date::Calc::Days_in_Month( $year, $month );
+	    $d2 = Date::Calc::Days_in_Month( $year, $month + 1 );
+	    $day += $d1;
+	}
+    }
+    else
+    {
+	$d1 = Date::Calc::Days_in_Month( $year, $month );
+    }
+
     # get all of the eprints to the end of the previous month
     my $list = get_eprints_before_month( $session, $dataset, $year, $month );
 
     # work out which eprints are due for update today
     my $n           = $list->count;
-    my $h           = Date::Calc::Days_in_Month( $year, $month ) * 24;
-    my $hour_count  = ( $day - 1 ) * 24 + $hour;
-    my $index_start = ( $hour_count * $n ) / $h;
-    my $index_end   = ( ( $hour_count + 1 ) * $n ) / $h - 1;
+    my $nhours      = ( $d1 + $d2 ) * 24;
+    my $hourpos     = ( $day - 1 ) * 24 + $hour;
+    my $index_start = ( $hourpos * $n ) / $nhours;
+    my $index_end   = ( ( $hourpos + 1 ) * $n ) / $nhours - 1;
     my $index_count = ( $index_end >= $index_start ) ? $index_end - $index_start + 1 : 1;
     my @ids         = @{ $list->ids( $index_start, $index_count ) };
 
@@ -630,29 +697,49 @@ sub test_eprint_selection_algorithm
     my @ids_all = @{ $list->ids( 0, $list->count ) };
     $list->dispose;
 
+    if( $bimonthly && $test_month % 2 == 0 )
+    {
+	# Feb Apr Jun Aug Oct Dec -- start a month earlier
+	$test_month--;
+    }
+
     # build a list of the eprints to be updated, and sort into ascending order
-    my @ids_update = ();
+    my %ids_update = ();
     my $d = Date::Calc::Days_in_Month( $test_year, $test_month );
     if( $period eq "day" )
     {
 	# get the eprint IDs for every day
 	for( my $test_day = 1 ; $test_day <= $d ; $test_day++ )
 	{
-	    push @ids_update, get_eprintids_for_day( $session, $dataset, $test_year, $test_month, $test_day );
+	    hpush %ids_update, get_eprintids_for_day( $session, $dataset, $test_year, $test_month, $test_day );
 	    if( $test_day > 1 )
 	    {
-		push @ids_update, get_eprintids_for_yesterday( $session, $dataset, $test_year, $test_month, $test_day );
+		hpush %ids_update, get_eprintids_for_yesterday( $session, $dataset, $test_year, $test_month, $test_day );
+	    }
+	}
+
+	if( $bimonthly )
+	{
+	    $test_month++;
+	    $d = Date::Calc::Days_in_Month( $test_year, $test_month );
+	    for( my $test_day = 1 ; $test_day <= $d ; $test_day++ )
+	    {
+		hpush %ids_update, get_eprintids_for_day( $session, $dataset, $test_year, $test_month, $test_day );
+		if( $test_day > 1 )
+		{
+		    hpush %ids_update, get_eprintids_for_yesterday( $session, $dataset, $test_year, $test_month, $test_day );
+		}
 	    }
 	}
 
 	# add the eprints that were added on the last day of the month
 	if( $test_month == 12 )
 	{
-	    push @ids_update, get_eprintids_for_yesterday( $session, $dataset, $test_year + 1, 1, 1 );
+	    hpush %ids_update, get_eprintids_for_yesterday( $session, $dataset, $test_year + 1, 1, 1 );
 	}
 	else
 	{
-	    push @ids_update, get_eprintids_for_yesterday( $session, $dataset, $test_year, $test_month + 1, 1 );
+	    hpush %ids_update, get_eprintids_for_yesterday( $session, $dataset, $test_year, $test_month + 1, 1 );
 	}
 
     }
@@ -663,17 +750,36 @@ sub test_eprint_selection_algorithm
 	{
 	    for( my $test_hour = 0 ; $test_hour < 24 ; $test_hour++ )
 	    {
-		push @ids_update, get_eprintids_for_hour( $session, $dataset, $test_year, $test_month, $test_day, $test_hour );
+		hpush %ids_update, get_eprintids_for_hour( $session, $dataset, $test_year, $test_month, $test_day, $test_hour );
 		if( $test_day > 1 || $test_hour > 0 )
 		{
-		    push @ids_update,
+		    hpush %ids_update,
 		      get_eprintids_for_last_hour( $session, $dataset, $test_year, $test_month, $test_day, $test_hour );
 		}
 	    }
 	}
 
+	if( $bimonthly )
+	{
+	    $test_month++;
+	    $d = Date::Calc::Days_in_Month( $test_year, $test_month );
+	    for( my $test_day = 1 ; $test_day <= $d ; $test_day++ )
+	    {
+		for( my $test_hour = 0 ; $test_hour < 24 ; $test_hour++ )
+		{
+		    hpush %ids_update,
+		      get_eprintids_for_hour( $session, $dataset, $test_year, $test_month, $test_day, $test_hour );
+		    if( $test_day > 1 || $test_hour > 0 )
+		    {
+			hpush %ids_update,
+			  get_eprintids_for_last_hour( $session, $dataset, $test_year, $test_month, $test_day, $test_hour );
+		    }
+		}
+	    }
+	}
+
     }
-    my @ids_sorted = sort { $a <=> $b } @ids_update;
+    my @ids_sorted = sort { $a <=> $b } keys %ids_update;
 
     # compare the two lists
     my $n_all    = scalar @ids_all;

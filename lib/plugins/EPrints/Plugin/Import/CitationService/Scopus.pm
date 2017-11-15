@@ -14,7 +14,7 @@ package EPrints::Plugin::Import::CitationService::Scopus;
 #  This file is part of the Citation Count Dataset and Import Plug-ins for GNU
 #  EPrints 3.
 #
-#  Copyright (c) 2015 Queensland University of Technology, Queensland, Australia
+#  Copyright (c) 2017 Queensland University of Technology, Queensland, Australia
 #
 #  The plug-ins are free software; you can redistribute them and/or modify
 #  them under the terms of the GNU General Public License as published by
@@ -108,13 +108,6 @@ sub new
 	return $self;
     }
 
-    # other network configuration
-    my $net_retry = $self->{session}->get_conf( "scapi", "net_retry" );
-    if( defined( $net_retry ) && ref( $net_retry ) eq "HASH" )
-    {
-	$self->{net_retry} = $net_retry;
-    }
-
     # An ordered list of the methods for generating querystrings
     $self->{queries} = [
 	qw{
@@ -124,6 +117,15 @@ sub new
 	  }
     ];
     $self->{current_query} = -1;
+
+    # Plugin-specific net_retry parameters (command line > config > default)
+    my $default_net_retry = $self->{session}->get_conf( "scapi", "net_retry" );
+    $default_net_retry->{max} //= 4;
+    $default_net_retry->{interval} //= 30;
+    foreach my $k ( keys %{$default_net_retry} )
+    {
+	$self->{net_retry}->{$k} //= $default_net_retry->{$k};
+    }
 
     return $self;
 }
@@ -210,8 +212,8 @@ sub get_epdata
 	eval {
 	    $response_xml = $xml_parser->parse_string( $body );
 	    1;
-	}
-	or do
+	  }
+	  or do
 	{
 	    # Workaround for malformed XML error responses --
 	    # parse out the status code and detail using regexes
@@ -228,11 +230,14 @@ sub get_epdata
 	    {
 		$status_code   ||= '-';
 		$status_detail ||= '-';
-		$plugin->error( "Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: " . $quri->as_string );
+		$plugin->error(
+"Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: "
+		      . $quri->as_string );
 	    }
 	    else
 	    {
-		$plugin->warning( "Unable to parse response XML for EPrint ID $eprintid: [$code] Request URL: ". $quri->as_string . "\n$body" );
+		$plugin->warning( "Unable to parse response XML for EPrint ID $eprintid: [$code] Request URL: " .
+				  $quri->as_string . "\n$body" );
 	    }
 	    next QUERY_METHOD;
 	};
@@ -247,7 +252,9 @@ sub get_epdata
 	    {
 		$status_code   ||= '-';
 		$status_detail ||= '-';
-		$plugin->error( "Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: " . $quri->as_string );
+		$plugin->error(
+"Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: "
+		      . $quri->as_string );
 	    }
 	    else
 	    {
@@ -352,11 +359,11 @@ sub _get_quoted_param
 	    # the string on all words-that-include-ampersands.
 	    #   e.g: ("a x&y b & c") => ("a" "b c")
 
-	    $string =~ s/[^\pL\pN&]+/ /g;        # strip all punctuation, except '&'
+	    $string =~ s/[^\pL\pN&]+/ /g;    # strip all punctuation, except '&'
 
-	    $string =~ s/(^| )&( |$)/ /g;        # isolated ampersands can be removed
-	    $string =~ s/\S*&\S*/" "/g;          # explode tokens with ampersands in them
-	    $string =~ s/^( ?"")? | ("" ?)?$//g; # clean up
+	    $string =~ s/(^| )&( |$)/ /g;           # isolated ampersands can be removed
+	    $string =~ s/\S*&\S*/" "/g;             # explode tokens with ampersands in them
+	    $string =~ s/^( ?"")? | ("" ?)?$//g;    # clean up
 
 	    $string = '"' . $string . '"';
 	}
@@ -447,11 +454,21 @@ sub response_to_epdata
     my $eid = shift @{ $record->getElementsByLocalName( "eid" ) };
     if( !defined $eid )
     {
-	$plugin->error( "Scopus responded with no 'eid' in entry, fallback='$fallback_cluster'. XML:\n" . $response_xml->toString );
+	$plugin->error(
+		    "Scopus responded with no 'eid' in entry, fallback='$fallback_cluster'. XML:\n" . $response_xml->toString );
     }
 
     my $cluster = $fallback_cluster;
     eval { $cluster = $eid->textContent };
+
+    if( $fallback_cluster && $cluster ne $fallback_cluster )
+    {
+	# This is a fatal error -- either we have the wrong eid stored in the database,
+	# or Scopus returned citation counts for the wrong record.  Either way, manual
+	# intervention will be required.
+	$plugin->error( "Scopus returned an 'eid' {$cluster} that doesn't match the existing one {$fallback_cluster}" );
+	return undef;
+    }
 
     my $citation_count = shift @{ $record->getElementsByLocalName( "citedby-count" ) };
     return { cluster => $cluster,
@@ -466,7 +483,7 @@ sub _log_response
     my $message = 'Unable to retrieve data from Scopus. ';
 
     # Set by LWP::UserAgent if the error happens client-side (e.g. while connecting)
-    my $client_warning = $response->header('Client-Warning');
+    my $client_warning = $response->header( 'Client-Warning' );
     if( $client_warning && $client_warning eq 'Internal response' )
     {
 	$message .= 'Failed with status: ';
@@ -480,7 +497,7 @@ sub _log_response
     $message .= $response->status_line;
 
     # Set by LWP::UserAgent if the callback die()ed.
-    my $reason = $response->header('X-Died');
+    my $reason = $response->header( 'X-Died' );
     if( $reason )
     {
 	$message .= " ($reason)";
