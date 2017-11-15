@@ -102,7 +102,7 @@ sub can_process
     return 0 if $type eq "other";
 
     # otherwise, we can (try to) retrieve data if this eprint has a DOI, or title and authors
-    return $eprint->is_set( "identifier" ) || ( $eprint->is_set( "title" ) && $eprint->is_set( "creators_name" ) );
+    return $eprint->is_set( "id_number" ) || ( $eprint->is_set( "title" ) && $eprint->is_set( "creators_name" ) );
 }
 
 sub _get_query_xml
@@ -132,10 +132,10 @@ sub _get_query_xml
 	my $ut = $eprint->get_value( 'wos_cluster' );
 	$cite_map->appendChild( $session->render_data_element( 0, 'val', $ut, 'name'=>'ut' ) );
     }
-    elsif( $eprint->is_set( 'identifier' ) )
+    elsif( $eprint->is_set( 'id_number' ) )
     {
 	# Search by DOI
-	my $doi = $eprint->get_value( 'identifier' );
+	my $doi = $eprint->get_value( 'id_number' );
 	$doi =~ s!^http://(dx\.)?doi\.org/!!;
 	$doi =~ s!^doi:!!;
 	$cite_map->appendChild( $session->render_data_element( 0, 'val', $doi, 'name'=>'doi' ) );
