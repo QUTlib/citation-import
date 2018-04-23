@@ -9,12 +9,12 @@ package EPrints::Plugin::Import::CitationService::Scopus;
 #
 ###############################################################################
 #
-# Copyright 2017 Queensland University of Technology. All Rights Reserved.
+# Copyright 2018 Queensland University of Technology. All Rights Reserved.
 #
 #  This file is part of the Citation Count Dataset and Import Plug-ins for GNU
 #  EPrints 3.
 #
-#  Copyright (c) 2017 Queensland University of Technology, Queensland, Australia
+#  Copyright (c) 2018 Queensland University of Technology, Queensland, Australia
 #
 #  The plug-ins are free software; you can redistribute them and/or modify
 #  them under the terms of the GNU General Public License as published by
@@ -99,6 +99,8 @@ sub new
     # set some parameters
     $self->{name} = "Scopus Citation Ingest";
 
+    $self->{metadata_search} = $self->{session}->get_conf( "scapi", "metadata_search" ) // 1;
+
     # get the developer key
     $self->{dev_id} = $self->{session}->get_conf( "scapi", "developer_id" );
     if( !defined( $self->{dev_id} ) )
@@ -113,9 +115,12 @@ sub new
 	qw{
 	  _get_querystring_eid
 	  _get_querystring_doi
-	  _get_querystring_metadata
 	  }
     ];
+    if( $self->{metadata_search} )
+    {
+	push @{ $self->{queries} }, '_get_querystring_metadata';
+    }
     $self->{current_query} = -1;
 
     # Plugin-specific net_retry parameters (command line > config > default)
@@ -148,6 +153,9 @@ sub can_process
 
     # we can retrieve data if this eprint has a (usable) DOI
     return 1 if( $eprint->is_set( "id_number" ) && is_usable_doi( $eprint->get_value( "id_number" ) ) );
+
+    # Don't do any metadata searches if not configured to do so.
+    return 0 unless $plugin->{metadata_search};
 
     # Scopus doesn't contain data for the following types
     my $type = $eprint->get_value( "type" );
@@ -521,6 +529,8 @@ sub _call
     my $ua = LWP::UserAgent->new( conn_cache => $plugin->{conn_cache} );
     $ua->env_proxy;
     $ua->timeout( 15 );
+    $ua->default_header( 'X-ELS-APIKey' => $plugin->{dev_id} );
+    $ua->default_header( 'Accept'       => 'application/xml' );
 
     my $response       = undef;
     my $net_tries_left = $max_retries + 1;
