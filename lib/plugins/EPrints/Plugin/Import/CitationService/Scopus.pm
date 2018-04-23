@@ -583,7 +583,14 @@ sub is_usable_doi
 
     return 0 if( !EPrints::Utils::is_set( $doi ) );
 
-    $doi =~ s!^https?://(dx\.)?doi\.org/!!i;
+    if( eval { require EPrints::DOI; } )
+    {
+	return EPrints::DOI->parse( $string, test => 1 );
+    }
+
+    # dodgy fallback
+
+    $doi =~ s!^(https?://+(dx\.)?doi\.org/|info:)?!!i;
     $doi =~ s!^doi:!!i;
 
     return 0 if( $doi !~ m!^10\.[^/]+/! );
