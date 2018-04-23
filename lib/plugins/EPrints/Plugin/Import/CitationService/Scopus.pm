@@ -590,7 +590,7 @@ sub is_usable_doi
 
     # dodgy fallback
 
-    $doi =~ s!^(https?://+(dx\.)?doi\.org/|info:)?!!i;
+    $doi =~ s!^(https?://+(dx\.)?doi\.org/|info:)!!i;
     $doi =~ s!^doi:!!i;
 
     return 0 if( $doi !~ m!^10\.[^/]+/! );
