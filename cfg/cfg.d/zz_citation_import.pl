@@ -144,6 +144,33 @@ $c->{wos}->{get_uri_for_eprint} = sub {
 # The database editions to search:
 # $c->{wos}->{editions} = [qw/ SCI SSCI AHCI IC CCR ISTP ISSHP /];
 
+#
+# The eprint field that holds (possible) DOIs.
+#
+#$c->{wos}->{doi_field} = 'id_number';
+
+##########################################
+# From citation-import cfg.d/wos-lamr.pl #
+##########################################
+
+###############################################################################
+#
+# Web of Science LAMR search configuration.
+#
+###############################################################################
+$c->{'wos-lamr'} = {};
+
+# Configuration for a Premium account:
+#$c->{'wos-lamr'}->{LAMR_ENDPOINT} = 'https://ws.isiknowledge.com/cps/xrpc';
+#$c->{'wos-lamr'}->{AUTH_USERNAME} = undef;
+#$c->{'wos-lamr'}->{AUTH_PASSWORD} = undef;
+
+#
+# The eprint field that holds (possible) DOIs.  If undefined, defaults to the
+# value of $c->{wos}->{doi_field} (if that, in turn, is defined)
+#
+#$c->{'wos-lamr'}->{doi_field} = 'id_number';
+
 ##############################################
 # From citation-import cfg.d/datasets.pl.inc #
 ##############################################

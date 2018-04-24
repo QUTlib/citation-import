@@ -9,12 +9,12 @@ package EPrints::Plugin::Import::CitationService::Scopus;
 #
 ###############################################################################
 #
-# Copyright 2017 Queensland University of Technology. All Rights Reserved.
+# Copyright 2018 Queensland University of Technology. All Rights Reserved.
 #
 #  This file is part of the Citation Count Dataset and Import Plug-ins for GNU
 #  EPrints 3.
 #
-#  Copyright (c) 2017 Queensland University of Technology, Queensland, Australia
+#  Copyright (c) 2018 Queensland University of Technology, Queensland, Australia
 #
 #  The plug-ins are free software; you can redistribute them and/or modify
 #  them under the terms of the GNU General Public License as published by
@@ -99,6 +99,8 @@ sub new
     # set some parameters
     $self->{name} = "Scopus Citation Ingest";
 
+    $self->{metadata_search} = $self->{session}->get_conf( "scapi", "metadata_search" ) // 1;
+
     # get the developer key
     $self->{dev_id} = $self->{session}->get_conf( "scapi", "developer_id" );
     if( !defined( $self->{dev_id} ) )
@@ -113,9 +115,12 @@ sub new
 	qw{
 	  _get_querystring_eid
 	  _get_querystring_doi
-	  _get_querystring_metadata
 	  }
     ];
+    if( $self->{metadata_search} )
+    {
+	push @{ $self->{queries} }, '_get_querystring_metadata';
+    }
     $self->{current_query} = -1;
 
     # Plugin-specific net_retry parameters (command line > config > default)
@@ -126,6 +131,10 @@ sub new
     {
 	$self->{net_retry}->{$k} //= $default_net_retry->{$k};
     }
+
+    # Other configurable parameters
+    my $doi_field = $self->{session}->get_conf( 'scapi', 'doi_field' ) || 'id_number';
+    $self->{doi_field} = $doi_field;
 
     return $self;
 }
@@ -147,7 +156,10 @@ sub can_process
     }
 
     # we can retrieve data if this eprint has a (usable) DOI
-    return 1 if( $eprint->is_set( "id_number" ) && is_usable_doi( $eprint->get_value( "id_number" ) ) );
+    return 1 if( $eprint->is_set( $plugin->{doi_field} ) && is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) ) );
+
+    # Don't do any metadata searches if not configured to do so.
+    return 0 unless $plugin->{metadata_search};
 
     # Scopus doesn't contain data for the following types
     my $type = $eprint->get_value( "type" );
@@ -383,9 +395,11 @@ sub _get_querystring_eid
 sub _get_querystring_doi
 {
     my( $plugin, $eprint ) = @_;
-    return undef if(    !$eprint->is_set( 'id_number' )
-		     || !is_usable_doi( $eprint->get_value( 'id_number' ) ) );
-    return 'doi(' . $plugin->_get_quoted_param( $eprint->get_value( 'id_number' ), 1 ) . ')';
+    return undef unless $eprint->is_set( $plugin->{doi_field} );
+
+    my $doi = is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) );
+    return undef unless $doi;
+    return 'doi(' . $plugin->_get_quoted_param( $doi, 1 ) . ')';
 }
 
 sub _get_querystring_metadata
@@ -521,6 +535,8 @@ sub _call
     my $ua = LWP::UserAgent->new( conn_cache => $plugin->{conn_cache} );
     $ua->env_proxy;
     $ua->timeout( 15 );
+    $ua->default_header( 'X-ELS-APIKey' => $plugin->{dev_id} );
+    $ua->default_header( 'Accept'       => 'application/xml' );
 
     my $response       = undef;
     my $net_tries_left = $max_retries + 1;
@@ -560,7 +576,7 @@ sub _call
 }
 
 #
-# Return 1 if a given DOI is usable for searching Scopus, or 0 if it is not.
+# Return the valid DOI as a string if a given DOI is usable for searching Scopus, or undef if it is not.
 #
 # Ideally, we would be able to encode all DOIs in such a manner as to make them
 # acceptable to Scopus. However, we do not have any documentation as to how
@@ -571,14 +587,26 @@ sub is_usable_doi
 {
     my( $doi ) = @_;
 
-    return 0 if( !EPrints::Utils::is_set( $doi ) );
+    return undef if( !EPrints::Utils::is_set( $doi ) );
 
-    $doi =~ s!^https?://(dx\.)?doi\.org/!!i;
-    $doi =~ s!^doi:!!i;
+    if( eval { require EPrints::DOI; } )
+    {
+	$doi = EPrints::DOI->parse( $string );
+	return $doi ? $doi->to_string( noprefix => 1 ) : undef;
+    }
+    else
+    {
+	# dodgy fallback
 
-    return 0 if( $doi !~ m!^10\.[^/]+/! );
+	$doi = "$doi";
+	$doi =~ s!^https?://+(dx\.)?doi\.org/+!!i;
+	$doi =~ s!^info:(doi/+)?!!i;
+	$doi =~ s!^doi:!!i;
 
-    return 1;
+	return undef if( $doi !~ m!^10\.[^/]+/! );
+
+	return $doi;
+    }
 }
 
 sub _get_query_uri

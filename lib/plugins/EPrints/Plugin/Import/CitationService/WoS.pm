@@ -143,6 +143,10 @@ sub new
 	$self->{net_retry}->{$k} //= $default_net_retry->{$k};
     }
 
+    # Other configurable parameters
+    my $doi_field = $self->{session}->get_conf( 'wos', 'doi_field' ) || 'id_number';
+    $self->{doi_field} = $doi_field;
+
     # this hash will hold the query parameters that are the same for every request
     $self->{query} = {};
 
@@ -249,8 +253,8 @@ sub _retrieve_uid
     my $search = undef;
 
     # Try to retrieve the UID using a DOI if it is set
-    if( $eprint->is_set( 'id_number' )
-	&& _is_usable_doi( $eprint->get_value( 'id_number' ) ) )
+    if( $eprint->is_set( $plugin->{doi_field} )
+	&& _is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) ) )
     {
 	$search = $plugin->get_search_for_eprint( $eprint, $soap, $plugin->_get_querystring_doi( $eprint ) );
 	if( defined $search )
@@ -664,11 +668,15 @@ sub call
     return $som;
 }
 
-# Return a WoS query string using the eprints' DOI
+# Return a WoS query string using the eprint's DOI
 sub _get_querystring_doi
 {
     my( $plugin, $eprint ) = @_;
-    return 'DO=(' . $eprint->get_value( 'id_number' ) . ')';
+    return undef unless $eprint->is_set( $plugin->{doi_field} );
+
+    my $doi = _is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) );
+    return undef unless $doi;
+    return 'DO=(' . $doi . ')';
 }
 
 # Return a WoS query string using bibliographic metadata: author,
@@ -730,8 +738,8 @@ sub _get_som_error
 }
 
 #
-# Return 1 if a given DOI is usable for searching WoS, or 0 if it is
-# not.
+# Return the valid DOI string if a given DOI is usable for searching WoS,
+# or undef if it is not.
 #
 # Ideally, we would be able to encode all DOIs in such a manner as to
 # make them acceptable. However, we do not have any documentation as
@@ -741,6 +749,10 @@ sub _get_som_error
 sub _is_usable_doi
 {
     my( $doi ) = @_;
+
+    # FIXME
+    $doi = EPrints::Plugin::Import::CitationService::Scopus::is_usable_doi( $doi );
+    return undef unless $doi;
 
     my $depth = 0;
     if( $doi =~ /[()]/ )
@@ -761,13 +773,13 @@ sub _is_usable_doi
 
 	    # Negative depth indicates a closing parenthesis has
 	    # proceeded an opening parenthesis
-	    return 0 if $depth < 0;
+	    return undef if $depth < 0;
 	}
     }
 
     # If parentheses are matched, then depth will be zero at the end
     # of the string.
-    return ( $depth eq 0 );
+    return ( $depth eq 0 ) ? $doi : 0;
 }
 
 1;
