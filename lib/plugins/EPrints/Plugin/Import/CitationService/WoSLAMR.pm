@@ -111,9 +111,14 @@ sub can_process
 
 sub _get_query_xml
 {
-    my( $session, $eprint ) = @_;
+    my( $plugin, $eprint ) = @_;
+
+    $session = $plugin->{session};
 
     my $eprintid = $eprint->id;
+
+    # FIXME
+    my $valid_doi = EPrints::Plugin::Import::CitationService::Scopus::is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) );
 
     # WHO'S REQUESTING
     my $map1 = $session->make_element( 'map' );
@@ -134,15 +139,13 @@ sub _get_query_xml
     {
 	# Search by UT
 	my $ut = $eprint->get_value( 'wos_cluster' );
+	return undef if $ut eq '-';
 	$cite_map->appendChild( $session->render_data_element( 0, 'val', $ut, 'name'=>'ut' ) );
     }
-    elsif( $eprint->is_set( $plugin->{doi_field} ) )
+    elsif( $valid_doi )
     {
 	# Search by DOI
-	my $doi = $eprint->get_value( $plugin->{doi_field} );
-	$doi =~ s!^http://(dx\.)?doi\.org/!!;
-	$doi =~ s!^doi:!!;
-	$cite_map->appendChild( $session->render_data_element( 0, 'val', $doi, 'name'=>'doi' ) );
+	$cite_map->appendChild( $session->render_data_element( 0, 'val', $valid_doi, 'name'=>'doi' ) );
     }
     else
     {
@@ -233,7 +236,8 @@ sub get_epdata
 
     my $eprintid = $eprint->id;
 
-    my $query_xml = _get_query_xml( $session, $eprint );
+    my $query_xml = $plugin->_get_query_xml( $eprint );
+    return undef unless $query_xml;
 
     my $response = $plugin->_post_query( $query_xml );
 
