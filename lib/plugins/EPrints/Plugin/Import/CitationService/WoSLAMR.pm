@@ -77,6 +77,10 @@ sub new
 	}
     }
 
+    # Other configurable parameters
+    my $doi_field = $self->{session}->get_conf( 'wos-lamr', 'doi_field' ) || $self->{session}->get_conf( 'wos', 'doi_field' ) || 'id_number';
+    $self->{doi_field} = $doi_field;
+
     return $self;
 }
 
@@ -102,7 +106,7 @@ sub can_process
     return 0 if $type eq "other";
 
     # otherwise, we can (try to) retrieve data if this eprint has a DOI, or title and authors
-    return $eprint->is_set( "id_number" ) || ( $eprint->is_set( "title" ) && $eprint->is_set( "creators_name" ) );
+    return $eprint->is_set( $plugin->{doi_field} ) || ( $eprint->is_set( "title" ) && $eprint->is_set( "creators_name" ) );
 }
 
 sub _get_query_xml
@@ -132,10 +136,10 @@ sub _get_query_xml
 	my $ut = $eprint->get_value( 'wos_cluster' );
 	$cite_map->appendChild( $session->render_data_element( 0, 'val', $ut, 'name'=>'ut' ) );
     }
-    elsif( $eprint->is_set( 'id_number' ) )
+    elsif( $eprint->is_set( $plugin->{doi_field} ) )
     {
 	# Search by DOI
-	my $doi = $eprint->get_value( 'id_number' );
+	my $doi = $eprint->get_value( $plugin->{doi_field} );
 	$doi =~ s!^http://(dx\.)?doi\.org/!!;
 	$doi =~ s!^doi:!!;
 	$cite_map->appendChild( $session->render_data_element( 0, 'val', $doi, 'name'=>'doi' ) );

@@ -132,6 +132,10 @@ sub new
 	$self->{net_retry}->{$k} //= $default_net_retry->{$k};
     }
 
+    # Other configurable parameters
+    my $doi_field = $self->{session}->get_conf( 'scapi', 'doi_field' ) || 'id_number';
+    $self->{doi_field} = $doi_field;
+
     return $self;
 }
 
@@ -152,7 +156,7 @@ sub can_process
     }
 
     # we can retrieve data if this eprint has a (usable) DOI
-    return 1 if( $eprint->is_set( "id_number" ) && is_usable_doi( $eprint->get_value( "id_number" ) ) );
+    return 1 if( $eprint->is_set( $plugin->{doi_field} ) && is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) ) );
 
     # Don't do any metadata searches if not configured to do so.
     return 0 unless $plugin->{metadata_search};
@@ -391,9 +395,9 @@ sub _get_querystring_eid
 sub _get_querystring_doi
 {
     my( $plugin, $eprint ) = @_;
-    return undef if(    !$eprint->is_set( 'id_number' )
-		     || !is_usable_doi( $eprint->get_value( 'id_number' ) ) );
-    return 'doi(' . $plugin->_get_quoted_param( $eprint->get_value( 'id_number' ), 1 ) . ')';
+    return undef if(    !$eprint->is_set( $plugin->{doi_field} )
+		     || !is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) ) );
+    return 'doi(' . $plugin->_get_quoted_param( $eprint->get_value( $plugin->{doi_field} ), 1 ) . ')';
 }
 
 sub _get_querystring_metadata

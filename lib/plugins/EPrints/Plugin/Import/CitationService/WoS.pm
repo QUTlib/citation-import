@@ -143,6 +143,10 @@ sub new
 	$self->{net_retry}->{$k} //= $default_net_retry->{$k};
     }
 
+    # Other configurable parameters
+    my $doi_field = $self->{session}->get_conf( 'wos', 'doi_field' ) || 'id_number';
+    $self->{doi_field} = $doi_field;
+
     # this hash will hold the query parameters that are the same for every request
     $self->{query} = {};
 
@@ -249,8 +253,8 @@ sub _retrieve_uid
     my $search = undef;
 
     # Try to retrieve the UID using a DOI if it is set
-    if( $eprint->is_set( 'id_number' )
-	&& _is_usable_doi( $eprint->get_value( 'id_number' ) ) )
+    if( $eprint->is_set( $plugin->{doi_field} )
+	&& _is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) ) )
     {
 	$search = $plugin->get_search_for_eprint( $eprint, $soap, $plugin->_get_querystring_doi( $eprint ) );
 	if( defined $search )
@@ -668,7 +672,7 @@ sub call
 sub _get_querystring_doi
 {
     my( $plugin, $eprint ) = @_;
-    return 'DO=(' . $eprint->get_value( 'id_number' ) . ')';
+    return 'DO=(' . $eprint->get_value( $plugin->{doi_field} ) . ')';
 }
 
 # Return a WoS query string using bibliographic metadata: author,
