@@ -132,6 +132,10 @@ sub new
 	$self->{net_retry}->{$k} //= $default_net_retry->{$k};
     }
 
+    # Other configurable parameters
+    my $doi_field = $self->{session}->get_conf( 'scapi', 'doi_field' ) || 'id_number';
+    $self->{doi_field} = $doi_field;
+
     return $self;
 }
 
@@ -152,7 +156,7 @@ sub can_process
     }
 
     # we can retrieve data if this eprint has a (usable) DOI
-    return 1 if( $eprint->is_set( "id_number" ) && is_usable_doi( $eprint->get_value( "id_number" ) ) );
+    return 1 if( $eprint->is_set( $plugin->{doi_field} ) && is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) ) );
 
     # Don't do any metadata searches if not configured to do so.
     return 0 unless $plugin->{metadata_search};
@@ -391,9 +395,11 @@ sub _get_querystring_eid
 sub _get_querystring_doi
 {
     my( $plugin, $eprint ) = @_;
-    return undef if(    !$eprint->is_set( 'id_number' )
-		     || !is_usable_doi( $eprint->get_value( 'id_number' ) ) );
-    return 'doi(' . $plugin->_get_quoted_param( $eprint->get_value( 'id_number' ), 1 ) . ')';
+    return undef unless $eprint->is_set( $plugin->{doi_field} );
+
+    my $doi = is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) );
+    return undef unless $doi;
+    return 'doi(' . $plugin->_get_quoted_param( $doi, 1 ) . ')';
 }
 
 sub _get_querystring_metadata
@@ -570,7 +576,7 @@ sub _call
 }
 
 #
-# Return 1 if a given DOI is usable for searching Scopus, or 0 if it is not.
+# Return the valid DOI as a string if a given DOI is usable for searching Scopus, or undef if it is not.
 #
 # Ideally, we would be able to encode all DOIs in such a manner as to make them
 # acceptable to Scopus. However, we do not have any documentation as to how
@@ -581,21 +587,26 @@ sub is_usable_doi
 {
     my( $doi ) = @_;
 
-    return 0 if( !EPrints::Utils::is_set( $doi ) );
+    return undef if( !EPrints::Utils::is_set( $doi ) );
 
     if( eval { require EPrints::DOI; } )
     {
-	return EPrints::DOI->parse( $string, test => 1 );
+	$doi = EPrints::DOI->parse( $string );
+	return $doi ? $doi->to_string( noprefix => 1 ) : undef;
     }
+    else
+    {
+	# dodgy fallback
 
-    # dodgy fallback
+	$doi = "$doi";
+	$doi =~ s!^https?://+(dx\.)?doi\.org/+!!i;
+	$doi =~ s!^info:(doi/+)?!!i;
+	$doi =~ s!^doi:!!i;
 
-    $doi =~ s!^(https?://+(dx\.)?doi\.org/|info:)!!i;
-    $doi =~ s!^doi:!!i;
+	return undef if( $doi !~ m!^10\.[^/]+/! );
 
-    return 0 if( $doi !~ m!^10\.[^/]+/! );
-
-    return 1;
+	return $doi;
+    }
 }
 
 sub _get_query_uri
