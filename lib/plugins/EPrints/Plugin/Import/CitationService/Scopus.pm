@@ -395,9 +395,11 @@ sub _get_querystring_eid
 sub _get_querystring_doi
 {
     my( $plugin, $eprint ) = @_;
-    return undef if(    !$eprint->is_set( $plugin->{doi_field} )
-		     || !is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) ) );
-    return 'doi(' . $plugin->_get_quoted_param( $eprint->get_value( $plugin->{doi_field} ), 1 ) . ')';
+    return undef unless $eprint->is_set( $plugin->{doi_field} );
+
+    my $doi = is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) );
+    return undef unless $doi;
+    return 'doi(' . $plugin->_get_quoted_param( $doi, 1 ) . ')';
 }
 
 sub _get_querystring_metadata
@@ -574,7 +576,7 @@ sub _call
 }
 
 #
-# Return 1 if a given DOI is usable for searching Scopus, or 0 if it is not.
+# Return the valid DOI as a string if a given DOI is usable for searching Scopus, or undef if it is not.
 #
 # Ideally, we would be able to encode all DOIs in such a manner as to make them
 # acceptable to Scopus. However, we do not have any documentation as to how
@@ -585,21 +587,26 @@ sub is_usable_doi
 {
     my( $doi ) = @_;
 
-    return 0 if( !EPrints::Utils::is_set( $doi ) );
+    return undef if( !EPrints::Utils::is_set( $doi ) );
 
     if( eval { require EPrints::DOI; } )
     {
-	return EPrints::DOI->parse( $string, test => 1 );
+	$doi = EPrints::DOI->parse( $string );
+	return $doi ? $doi->to_string( noprefix => 1 ) : undef;
     }
+    else
+    {
+	# dodgy fallback
 
-    # dodgy fallback
+	$doi = "$doi";
+	$doi =~ s!^https?://+(dx\.)?doi\.org/+!!i;
+	$doi =~ s!^info:(doi/+)?!!i;
+	$doi =~ s!^doi:!!i;
 
-    $doi =~ s!^(https?://+(dx\.)?doi\.org/|info:)!!i;
-    $doi =~ s!^doi:!!i;
+	return undef if( $doi !~ m!^10\.[^/]+/! );
 
-    return 0 if( $doi !~ m!^10\.[^/]+/! );
-
-    return 1;
+	return $doi;
+    }
 }
 
 sub _get_query_uri
