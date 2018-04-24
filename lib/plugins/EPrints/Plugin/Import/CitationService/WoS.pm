@@ -751,7 +751,7 @@ sub _is_usable_doi
     my( $doi ) = @_;
 
     # FIXME
-    my $doi = EPrints::Plugin::Import::CitationService::Scopus::is_usable_doi( $doi );
+    $doi = EPrints::Plugin::Import::CitationService::Scopus::is_usable_doi( $doi );
     return undef unless $doi;
 
     my $depth = 0;
