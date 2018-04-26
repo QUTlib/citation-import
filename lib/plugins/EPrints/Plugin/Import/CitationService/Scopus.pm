@@ -68,7 +68,7 @@ sub new
     $self->{blacklist_types} = $self->{session}->get_conf( 'scapi', 'blacklist_types' );
     if( !defined( $self->{blacklist_types} ) )
     {
-	$self->{blacklist_types} = [qw[ thesis other ]];
+	$self->{blacklist_types} = [ qw[ thesis other ] ];
     }
 
     # get the developer key
@@ -139,7 +139,8 @@ sub _query_method_for
     return undef if grep { $type eq $_ } @{ $self->{blacklist_types} };
 
     # we can retrieve data if this eprint has a (usable) DOI
-    return '_get_querystring_doi' if( $eprint->is_set( $plugin->{doi_field} ) && is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) ) );
+    return '_get_querystring_doi'
+      if( $eprint->is_set( $plugin->{doi_field} ) && is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) ) );
 
     # Don't do any metadata searches if not configured to do so.
     return undef unless $plugin->{metadata_search};
@@ -251,8 +252,8 @@ sub _get_quoted_param
 
 	    $string =~ s/[^\pL\pN&]+/ /g;    # strip all punctuation, except '&'
 
-	    $string =~ s/(^| )&( |$)/ /g;           # isolated ampersands can be removed
-	    $string =~ s/\S*&\S*/" "/g;             # explode tokens with ampersands in them
+	    $string =~ s/(^| )&( |$)/ /g;    # isolated ampersands can be removed
+	    $string =~ s/\S*&\S*/" "/g;      # explode tokens with ampersands in them
 	    $string = '"' . $string . '"';          # wrap in quotes
 	    $string =~ s/^(" *" )+|( " *")+$//g;    # clean up leading/trailing empty quotes
 	}
@@ -312,7 +313,8 @@ sub _get_query_uri
     my( $plugin, $search ) = @_;
 
     my $quri = $SEARCHAPI->clone;
-    $quri->query_form( httpAccept => 'application/xml',
+    $quri->query_form(
+		       httpAccept => 'application/xml',
 		       apiKey     => $plugin->{dev_id},
 		       query      => $search,
     );
@@ -380,8 +382,8 @@ sub get_epdata
     eval {
 	$response_xml = $xml_parser->parse_string( $body );
 	1;
-    }
-    or do
+      }
+      or do
     {
 	# Workaround for malformed XML error responses --
 	# parse out the status code and detail using regexes
@@ -404,8 +406,8 @@ sub get_epdata
 	}
 	else
 	{
-	    $plugin->warning( "Unable to parse response XML for EPrint ID $eprintid: [$code] Request URL: " .
-			      $quri->as_string . "\n$body" );
+	    $plugin->warning(
+		 "Unable to parse response XML for EPrint ID $eprintid: [$code] Request URL: " . $quri->as_string . "\n$body" );
 	}
 	return undef;
     };
@@ -460,9 +462,9 @@ sub get_response_status
 # sub get_number_matches
 # {
 #     my( $plugin, $response_xml ) = @_;
-# 
+#
 #     my $totalResults = $response_xml->getElementsByTagNameNS( $NS_OPENSEARCH, "totalResults" )->[ 0 ];
-# 
+#
 #     return 0 if !defined $totalResults;
 #     return $totalResults->textContent + 0;
 # }
@@ -482,7 +484,7 @@ sub response_to_epdata
 {
     my( $plugin, $response_xml, $eprint ) = @_;
 
-    my $eprintid = $eprint->id;
+    my $eprintid         = $eprint->id;
     my $fallback_cluster = $eprint->get_value( 'scopus_cluster' );
 
     my $record = shift @{ $response_xml->getElementsByTagNameNS( $NS_ATOM, "entry" ) };
@@ -494,13 +496,13 @@ sub response_to_epdata
     {
 	if( $fallback_cluster )
 	{
-	    $plugin->error(
-			"Scopus responded with no 'eid' in entry for $eprintid, fallback='$fallback_cluster'. XML:\n" . $response_xml->toString );
+	    $plugin->error( "Scopus responded with no 'eid' in entry for $eprintid, fallback='$fallback_cluster'. XML:\n" .
+			    $response_xml->toString );
 	}
 	else
 	{
-	    $plugin->error(
-			"Scopus responded with no 'eid' in entry for $eprintid, and there is no fallback. XML:\n" . $response_xml->toString );
+	    $plugin->error( "Scopus responded with no 'eid' in entry for $eprintid, and there is no fallback. XML:\n" .
+			    $response_xml->toString );
 	    return undef;
 	}
     }
@@ -514,12 +516,14 @@ sub response_to_epdata
 	# This is a fatal error -- either we have the wrong eid stored in the database,
 	# or Scopus returned citation counts for the wrong record.  Either way, manual
 	# intervention will be required.
-	$plugin->error( "Scopus returned an 'eid' {$cluster} for $eprintid that doesn't match the existing one {$fallback_cluster}" );
+	$plugin->error(
+		  "Scopus returned an 'eid' {$cluster} for $eprintid that doesn't match the existing one {$fallback_cluster}" );
 	return undef;
     }
 
     my $citation_count = shift @{ $record->getElementsByLocalName( 'citedby-count' ) };
-    return { cluster => $cluster,
+    return {
+	     cluster => $cluster,
 	     impact  => $citation_count->textContent
     };
 }
@@ -560,6 +564,7 @@ sub _log_response
 sub _is_fatal
 {
     my( $code ) = @_;
+
     # This treats buggy-looking responses (405,406,500)
     # as (probably) transient.
 
