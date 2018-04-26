@@ -31,44 +31,6 @@ package EPrints::Plugin::Import::CitationService::Scopus;
 #  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #
 ######################################################################
-#
-# June 2017 / Matty K:
-#
-# - handle API error responses better (#26)
-#
-######################################################################
-#
-# October 2016 / Matty K:
-#
-# - improved query parameterisation, timeouts, etc.
-#
-######################################################################
-#
-# October 2015 / Matty K:
-#
-# - update to use new api.elsevier.com API endpoint (big change)
-#
-######################################################################
-#
-# May 2013 / sf2:
-#
-# - don't fail if an EPrint has no title
-#
-######################################################################
-#
-# May-June 2013 / gregson:
-#
-# - Added query fallbacks - EID to DOI to metadata - to improve match
-#   success rate and handle Scopus changing EIDs
-# - Revised and improved exception handling
-# - Corrected encoding of multi-byte characters in the query
-# - Added a call() method to handle HTTP requests with retry on
-#   transport failure
-# - Added a workaround for Scopus return malformed XML error responses
-# - Refined metadata querystring generation to handle more special
-#   characters
-#
-######################################################################
 
 use strict;
 
