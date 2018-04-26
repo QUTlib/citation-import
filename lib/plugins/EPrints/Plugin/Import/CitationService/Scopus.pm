@@ -382,9 +382,8 @@ sub _get_quoted_param
 
 	    $string =~ s/(^| )&( |$)/ /g;           # isolated ampersands can be removed
 	    $string =~ s/\S*&\S*/" "/g;             # explode tokens with ampersands in them
-	    $string =~ s/^( ?"")? | ("" ?)?$//g;    # clean up
-
-	    $string = '"' . $string . '"';
+	    $string = '"' . $string . '"';          # wrap in quotes
+	    $string =~ s/^(" *" )+|( " *")+$//g;    # clean up leading/trailing empty quotes
 	}
     }
 
