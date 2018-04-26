@@ -73,13 +73,13 @@ package EPrints::Plugin::Import::CitationService::Scopus;
 use strict;
 
 use EPrints::Plugin::Import::CitationService;
-our @ISA = ( "EPrints::Plugin::Import::CitationService" );
+our @ISA = ( 'EPrints::Plugin::Import::CitationService' );
 
 use LWP::UserAgent;
 use Unicode::Normalize qw(NFKC);
 use URI;
 
-our $SEARCHAPI = URI->new( "http://api.elsevier.com/content/search/scopus" );
+our $SEARCHAPI = URI->new( 'http://api.elsevier.com/content/search/scopus' );
 
 my $NS_CTO        = 'http://www.elsevier.com/xml/cto/dtd';
 my $NS_ATOM       = 'http://www.w3.org/2005/Atom';
@@ -97,20 +97,20 @@ sub new
     my $self = $class->SUPER::new( %params );
 
     # set some parameters
-    $self->{name} = "Scopus Citation Ingest";
+    $self->{name} = 'Scopus Citation Ingest';
 
     # Enable/Disable search by metadata?
-    $self->{metadata_search} = $self->{session}->get_conf( "scapi", "metadata_search" ) // 1;
+    $self->{metadata_search} = $self->{session}->get_conf( 'scapi', 'metadata_search' ) // 1;
 
     # Types of records to not look up in Scopus.
-    $self->{blacklist_types} = $self->{session}->get_conf( "scapi", "blacklist_types" );
+    $self->{blacklist_types} = $self->{session}->get_conf( 'scapi', 'blacklist_types' );
     if( !defined( $self->{blacklist_types} ) )
     {
 	$self->{blacklist_types} = %w[ thesis other ];
     }
 
     # get the developer key
-    $self->{dev_id} = $self->{session}->get_conf( "scapi", "developer_id" );
+    $self->{dev_id} = $self->{session}->get_conf( 'scapi', 'developer_id' );
     if( !defined( $self->{dev_id} ) )
     {
 	$self->{error}   = 'Unable to load the Scopus developer key.';
@@ -132,7 +132,7 @@ sub new
     $self->{current_query} = -1;
 
     # Plugin-specific net_retry parameters (command line > config > default)
-    my $default_net_retry = $self->{session}->get_conf( "scapi", "net_retry" );
+    my $default_net_retry = $self->{session}->get_conf( 'scapi', 'net_retry' );
     $default_net_retry->{max}      //= 4;
     $default_net_retry->{interval} //= 30;
     foreach my $k ( keys %{$default_net_retry} )
@@ -153,10 +153,10 @@ sub can_process
 {
     my( $plugin, $eprint ) = @_;
 
-    if( $eprint->is_set( "scopus_cluster" ) )
+    if( $eprint->is_set( 'scopus_cluster' ) )
     {
-	# do not process eprints with EID set to "-"
-	return 0 if $eprint->get_value( "scopus_cluster" ) eq "-";
+	# do not process eprints with EID set to '-'
+	return 0 if $eprint->get_value( 'scopus_cluster' ) eq '-';
 
 	# otherwise, we can use the existing EID to retrieve data
 	return 1;
@@ -170,11 +170,11 @@ sub can_process
 
     # Scopus doesn't contain data for these types, or we don't want
     # to look them up.
-    my $type = $eprint->get_value( "type" );
+    my $type = $eprint->get_value( 'type' );
     return 0 if grep { $type eq $_ } @{ $self->{blacklist_types} };
 
     # otherwise, we can (try to) retrieve data if this eprint has a title and authors
-    return $eprint->is_set( "title" ) && $eprint->is_set( "creators_name" );
+    return $eprint->is_set( 'title' ) && $eprint->is_set( 'creators_name' );
 }
 
 #
@@ -211,7 +211,7 @@ sub get_epdata
 	if( !defined( $response ) )
 	{
 	    # Out of quota. Give up!
-	    die( "Aborting Scopus citation imports." );
+	    die( 'Aborting Scopus citation imports.' );
 	}
 
 	my $body = $response->content;
@@ -506,7 +506,7 @@ sub response_to_epdata
 	return undef;
     }
 
-    my $citation_count = shift @{ $record->getElementsByLocalName( "citedby-count" ) };
+    my $citation_count = shift @{ $record->getElementsByLocalName( 'citedby-count' ) };
     return { cluster => $cluster,
 	     impact  => $citation_count->textContent
     };
