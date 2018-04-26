@@ -99,7 +99,15 @@ sub new
     # set some parameters
     $self->{name} = "Scopus Citation Ingest";
 
+    # Enable/Disable search by metadata?
     $self->{metadata_search} = $self->{session}->get_conf( "scapi", "metadata_search" ) // 1;
+
+    # Types of records to not look up in Scopus.
+    $self->{blacklist_types} = $self->{session}->get_conf( "scapi", "blacklist_types" );
+    if( !defined( $self->{blacklist_types} ) )
+    {
+	$self->{blacklist_types} = %w[ thesis other ];
+    }
 
     # get the developer key
     $self->{dev_id} = $self->{session}->get_conf( "scapi", "developer_id" );
@@ -133,8 +141,7 @@ sub new
     }
 
     # Other configurable parameters
-    my $doi_field = $self->{session}->get_conf( 'scapi', 'doi_field' ) || 'id_number';
-    $self->{doi_field} = $doi_field;
+    $self->{doi_field} = $self->{session}->get_conf( 'scapi', 'doi_field' ) || 'id_number';
 
     return $self;
 }
@@ -161,10 +168,10 @@ sub can_process
     # Don't do any metadata searches if not configured to do so.
     return 0 unless $plugin->{metadata_search};
 
-    # Scopus doesn't contain data for the following types
+    # Scopus doesn't contain data for these types, or we don't want
+    # to look them up.
     my $type = $eprint->get_value( "type" );
-    return 0 if $type eq "thesis";
-    return 0 if $type eq "other";
+    return 0 if grep { $type eq $_ } @{ $self->{blacklist_types} };
 
     # otherwise, we can (try to) retrieve data if this eprint has a title and authors
     return $eprint->is_set( "title" ) && $eprint->is_set( "creators_name" );
