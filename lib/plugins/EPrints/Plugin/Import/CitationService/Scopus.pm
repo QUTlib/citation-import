@@ -460,6 +460,23 @@ sub _log_response
     $plugin->warning( $message );
 }
 
+sub _is_fatal
+{
+    my( $code ) = @_;
+    # This treats buggy-looking responses (405,406,500)
+    # as (probably) transient.
+
+    # Documented response codes:
+    #  400 - invalid information
+    #  401 - authentication error
+    #  403 - bad auth/entitlements
+    #  405 - invalid HTTP method -- bug?
+    #  406 - invalid content-type -- bug?
+    #  429 - quota exceeded
+    #  500 - bug
+    return grep { $_ == $code } ( 400, 401, 403, 429 );
+}
+
 #
 # Make an HTTP GET request to $uri and return the response. Will retry
 # up to $max_retries times after $retry_delay in the event of a
@@ -481,7 +498,7 @@ sub _call
     {
 	$response = $ua->get( $uri );
 
-	# Quota exceeded - abort
+	# Quota exceeded -- abort
 	if( $response->code == 429 )
 	{
 	    $plugin->_log_response( $uri, $response );
@@ -491,15 +508,11 @@ sub _call
 	# Some other failure.  Log it, wait a bit, and try again.
 	if( !$response->is_success )
 	{
-	    # TODO: explicitly handle responses
-	    #   400 - invalid information (?)
-	    #   401 - authentication error
-	    #   403 - bad auth/entitlements
-	    #   405 - invalid HTTP method !?
-	    #   406 - invalid content-type !?
-	    #   429 - (handled above)
-	    #   500 - (probably transient) ??
 	    $plugin->_log_response( $uri, $response );
+
+	    # give up on this eprint if things are too weird
+	    return $response if _is_fatal( $response->code );
+
 	    $net_tries_left--;
 	    if( $net_tries_left > 0 && $retry_delay > 0 )
 	    {
