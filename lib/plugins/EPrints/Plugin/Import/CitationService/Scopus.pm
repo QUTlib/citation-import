@@ -80,19 +80,6 @@ sub new
 	return $self;
     }
 
-    # An ordered list of the methods for generating querystrings
-    $self->{queries} = [
-	qw{
-	  _get_querystring_eid
-	  _get_querystring_doi
-	  }
-    ];
-    if( $self->{metadata_search} )
-    {
-	push @{ $self->{queries} }, '_get_querystring_metadata';
-    }
-    $self->{current_query} = -1;
-
     # Plugin-specific net_retry parameters (command line > config > default)
     my $default_net_retry = $self->{session}->get_conf( 'scapi', 'net_retry' );
     $default_net_retry->{max}      //= 4;
@@ -109,34 +96,46 @@ sub new
 }
 
 #
+# Pick the query method for the given eprint.  There can be only one.
+# Returns undef is there isn't one.
+#
+sub _query_method_for
+{
+    my( $plugin, $eprint ) = @_;
+
+    # Having a scopus cluster (EID) trumps all other considerations.
+    if( $eprint->is_set( 'scopus_cluster' ) )
+    {
+	# do not process eprints with EID set to '-'
+	return undef if $eprint->get_value( 'scopus_cluster' ) eq '-';
+
+	# otherwise, we can use the existing EID to retrieve data
+	return '_get_querystring_eid';
+    }
+
+    # Scopus doesn't contain data for these types, or we don't want
+    # to look them up.
+    my $type = $eprint->get_value( 'type' );
+    return undef if grep { $type eq $_ } @{ $self->{blacklist_types} };
+
+    # we can retrieve data if this eprint has a (usable) DOI
+    return '_get_querystring_doi' if( $eprint->is_set( $plugin->{doi_field} ) && is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) ) );
+
+    # Don't do any metadata searches if not configured to do so.
+    return undef unless $plugin->{metadata_search};
+
+    # otherwise, we can (try to) retrieve data if this eprint has a title and authors
+    return undef unless $eprint->is_set( 'title' ) && $eprint->is_set( 'creators_name' );
+    return '_get_querystring_metadata';
+}
+
+#
 # Test whether or not this plug-in can hope to retrieve data for a given eprint.
 #
 sub can_process
 {
     my( $plugin, $eprint ) = @_;
-
-    if( $eprint->is_set( 'scopus_cluster' ) )
-    {
-	# do not process eprints with EID set to '-'
-	return 0 if $eprint->get_value( 'scopus_cluster' ) eq '-';
-
-	# otherwise, we can use the existing EID to retrieve data
-	return 1;
-    }
-
-    # we can retrieve data if this eprint has a (usable) DOI
-    return 1 if( $eprint->is_set( $plugin->{doi_field} ) && is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) ) );
-
-    # Don't do any metadata searches if not configured to do so.
-    return 0 unless $plugin->{metadata_search};
-
-    # Scopus doesn't contain data for these types, or we don't want
-    # to look them up.
-    my $type = $eprint->get_value( 'type' );
-    return 0 if grep { $type eq $_ } @{ $self->{blacklist_types} };
-
-    # otherwise, we can (try to) retrieve data if this eprint has a title and authors
-    return $eprint->is_set( 'title' ) && $eprint->is_set( 'creators_name' );
+    return $plugin->_query_method_for( $eprint ) ? 1 : 0;
 }
 
 #
@@ -153,149 +152,104 @@ sub get_epdata
 
     my $eprintid = $eprint->get_id();
 
-    # Repeatedly query the citation service until a matching record is
-    # found or all query methods have been tried without success.
-    my $response_xml;
-    my $found_a_match = 0;
-    $plugin->_reset_query_methods();
-  QUERY_METHOD: while( !$found_a_match && defined $plugin->_next_query_method() )
+    # Which method do we use to fetch citation counts?
+    my $method = $plugin->_query_method_for( $eprint );
+    if( !$method )
     {
-	my $search = $plugin->_get_query( $eprint );
-	next QUERY_METHOD if( !defined $search );
-
-	# build the URL from which we can download the data
-	my $quri = $plugin->_get_query_uri( $search );
-
-	# Repeatedly query the citation service until a response is
-	# received or max allowed network requests has been reached.
-	my $response = $plugin->_call( $quri, $plugin->{net_retry}->{max}, $plugin->{net_retry}->{interval} );
-
-	if( !defined( $response ) )
-	{
-	    # Out of quota. Give up!
-	    die( 'Aborting Scopus citation imports.' );
-	}
-
-	my $body = $response->content;
-	my $code = $response->code;
-	if( !$body )
-	{
-	    $plugin->warning( "No or empty response from Scopus for EPrint ID $eprintid [$code]" );
-	    next QUERY_METHOD;
-	}
-
-	# Got a response, now try to parse it
-	my $xml_parser = $plugin->{session}->xml;
-
-	my $status_code;
-	my $status_detail;
-
-	eval {
-	    $response_xml = $xml_parser->parse_string( $body );
-	    1;
-	  }
-	  or do
-	{
-	    # Workaround for malformed XML error responses --
-	    # parse out the status code and detail using regexes
-	    $plugin->warning( "Received malformed XML error response {$@}" );
-	    if( $body =~ m/<statusCode[^>]*>(.+?)<\/statusCode>/g )
-	    {
-		$status_code = $1;
-	    }
-	    if( $body =~ m/<statusText[^>]*>(.+?)<\/statusText>/g )
-	    {
-		$status_detail = $1;
-	    }
-	    if( $status_code || $status_detail )
-	    {
-		$status_code   ||= '-';
-		$status_detail ||= '-';
-		$plugin->error(
-"Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: "
-		      . $quri->as_string );
-	    }
-	    else
-	    {
-		$plugin->warning( "Unable to parse response XML for EPrint ID $eprintid: [$code] Request URL: " .
-				  $quri->as_string . "\n$body" );
-	    }
-	    next QUERY_METHOD;
-	};
-
-	if( $code != 200 )
-	{
-	    # Don't die on errors because these may be caused by data
-	    # specific to a given eprint and dying would prevent
-	    # updates for the remaining eprints
-	    ( $status_code, $status_detail ) = $plugin->get_response_status( $response_xml );
-	    if( $status_code || $status_detail )
-	    {
-		$status_code   ||= '-';
-		$status_detail ||= '-';
-		$plugin->error(
-"Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: "
-		      . $quri->as_string );
-	    }
-	    else
-	    {
-		$plugin->error( "Scopus responded with unknown error condition for EPrint ID $eprintid: [$code] Request URL: " .
-				$quri->as_string . "\n" . $response_xml->toString );
-	    }
-	    next QUERY_METHOD;
-	}
-
-	$found_a_match = ( $plugin->get_number_matches( $response_xml ) > 0 );
-
-    }    # End QUERY_METHOD
-
-    return undef if( !$found_a_match );
-
-    return $plugin->response_to_epdata( $response_xml, $eprint );
-}
-
-#
-# Select the next query method. Returns the
-# zero-based index thereof, or undef if all query options are
-# exhausted.
-#
-# By default these return undef, so concrete plugins don't need to
-# override.
-#
-sub _next_query_method
-{
-    my( $plugin ) = @_;
-    if( $plugin->{current_query} >= ( scalar @{ $plugin->{queries} } - 1 ) )
-    {
-	$plugin->{current_query} = undef;
+	$plugin->error( "Attempting to lookup EPrint $eprintid but I don't know how!" );
 	return undef;
     }
-    return $plugin->{current_query}++;
-}
 
-#
-# Start iterating through the list of query methods again.
-#
-# next_query_method() must be called before the next query after a
-# call to this.
-#
-sub _reset_query_methods
-{
-    my( $plugin ) = @_;
-    $plugin->{current_query} = -1;
-    return;
-}
+    my $response_xml;
+    my $search = $plugin->$method( $eprint );
+    if( !$search )
+    {
+	$plugin->error( "Unable to generate query for EPrint $eprintid using $method" );
+	return undef;
+    }
 
-#
-# Return the query string from the current query method or undef if it
-# can't be created, e.g., if the eprint doesn't have the required
-# metadata for that query.
-#
-sub _get_query
-{
-    my( $plugin, $eprint ) = @_;
-    my $query_generator_fname = $plugin->{queries}->[ $plugin->{current_query} ];
-    return $plugin->$query_generator_fname( $eprint );
+    my $quri = $plugin->_get_query_uri( $search );
+
+    # Repeatedly query the citation service until a response is
+    # received or max allowed network requests has been reached.
+    my $response = $plugin->_call( $quri, $plugin->{net_retry}->{max}, $plugin->{net_retry}->{interval} );
+
+    if( !defined( $response ) )
+    {
+	# Out of quota. Give up!
+	die( 'Aborting Scopus citation imports.' );
+    }
+
+    my $body = $response->content;
+    my $code = $response->code;
+    if( !$body )
+    {
+	$plugin->error( "No or empty response from Scopus for EPrint $eprintid [$code]" );
+	return undef;
+    }
+
+    # Got a response, now try to parse it
+    my $xml_parser = $plugin->{session}->xml;
+
+    my $status_code;
+    my $status_detail;
+
+    eval {
+	$response_xml = $xml_parser->parse_string( $body );
+	1;
+    }
+    or do
+    {
+	# Workaround for malformed XML error responses --
+	# parse out the status code and detail using regexes
+	$plugin->warning( "Received malformed XML error response {$@}" );
+	if( $body =~ m/<statusCode[^>]*>(.+?)<\/statusCode>/g )
+	{
+	    $status_code = $1;
+	}
+	if( $body =~ m/<statusText[^>]*>(.+?)<\/statusText>/g )
+	{
+	    $status_detail = $1;
+	}
+	if( $status_code || $status_detail )
+	{
+	    $status_code   ||= '-';
+	    $status_detail ||= '-';
+	    $plugin->error(
+"Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: "
+		  . $quri->as_string );
+	}
+	else
+	{
+	    $plugin->warning( "Unable to parse response XML for EPrint ID $eprintid: [$code] Request URL: " .
+			      $quri->as_string . "\n$body" );
+	}
+	return undef;
+    };
+
+    if( $code != 200 )
+    {
+	# Don't die on errors because these may be caused by data
+	# specific to a given eprint and dying would prevent
+	# updates for the remaining eprints
+	( $status_code, $status_detail ) = $plugin->get_response_status( $response_xml );
+	if( $status_code || $status_detail )
+	{
+	    $status_code   ||= '-';
+	    $status_detail ||= '-';
+	    $plugin->error(
+"Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: "
+		  . $quri->as_string );
+	}
+	else
+	{
+	    $plugin->error( "Scopus responded with unknown error condition for EPrint ID $eprintid: [$code] Request URL: " .
+			    $quri->as_string . "\n" . $response_xml->toString );
+	}
+	return undef;
+    }
+
+    return $plugin->response_to_epdata( $response_xml, $eprint );
 }
 
 #
