@@ -65,6 +65,14 @@ $c->{scapi}->{net_retry} = {
 };
 
 #
+# eprint types we know won't be present in Scopus
+#
+$c->{scapi}->{blacklist_types} = [qw[
+    thesis
+    other
+]];
+
+#
 # The eprint field that holds (possible) DOIs.
 #
 #$c->{scapi}->{doi_field} = 'id_number';

@@ -31,55 +31,17 @@ package EPrints::Plugin::Import::CitationService::Scopus;
 #  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 #
 ######################################################################
-#
-# June 2017 / Matty K:
-#
-# - handle API error responses better (#26)
-#
-######################################################################
-#
-# October 2016 / Matty K:
-#
-# - improved query parameterisation, timeouts, etc.
-#
-######################################################################
-#
-# October 2015 / Matty K:
-#
-# - update to use new api.elsevier.com API endpoint (big change)
-#
-######################################################################
-#
-# May 2013 / sf2:
-#
-# - don't fail if an EPrint has no title
-#
-######################################################################
-#
-# May-June 2013 / gregson:
-#
-# - Added query fallbacks - EID to DOI to metadata - to improve match
-#   success rate and handle Scopus changing EIDs
-# - Revised and improved exception handling
-# - Corrected encoding of multi-byte characters in the query
-# - Added a call() method to handle HTTP requests with retry on
-#   transport failure
-# - Added a workaround for Scopus return malformed XML error responses
-# - Refined metadata querystring generation to handle more special
-#   characters
-#
-######################################################################
 
 use strict;
 
 use EPrints::Plugin::Import::CitationService;
-our @ISA = ( "EPrints::Plugin::Import::CitationService" );
+our @ISA = ( 'EPrints::Plugin::Import::CitationService' );
 
 use LWP::UserAgent;
 use Unicode::Normalize qw(NFKC);
 use URI;
 
-our $SEARCHAPI = URI->new( "http://api.elsevier.com/content/search/scopus" );
+our $SEARCHAPI = URI->new( 'http://api.elsevier.com/content/search/scopus' );
 
 my $NS_CTO        = 'http://www.elsevier.com/xml/cto/dtd';
 my $NS_ATOM       = 'http://www.w3.org/2005/Atom';
@@ -97,12 +59,20 @@ sub new
     my $self = $class->SUPER::new( %params );
 
     # set some parameters
-    $self->{name} = "Scopus Citation Ingest";
+    $self->{name} = 'Scopus Citation Ingest';
 
-    $self->{metadata_search} = $self->{session}->get_conf( "scapi", "metadata_search" ) // 1;
+    # Enable/Disable search by metadata?
+    $self->{metadata_search} = $self->{session}->get_conf( 'scapi', 'metadata_search' ) // 1;
+
+    # Types of records to not look up in Scopus.
+    $self->{blacklist_types} = $self->{session}->get_conf( 'scapi', 'blacklist_types' );
+    if( !defined( $self->{blacklist_types} ) )
+    {
+	$self->{blacklist_types} = [qw[ thesis other ]];
+    }
 
     # get the developer key
-    $self->{dev_id} = $self->{session}->get_conf( "scapi", "developer_id" );
+    $self->{dev_id} = $self->{session}->get_conf( 'scapi', 'developer_id' );
     if( !defined( $self->{dev_id} ) )
     {
 	$self->{error}   = 'Unable to load the Scopus developer key.';
@@ -124,8 +94,8 @@ sub new
     $self->{current_query} = -1;
 
     # Plugin-specific net_retry parameters (command line > config > default)
-    my $default_net_retry = $self->{session}->get_conf( "scapi", "net_retry" );
-    $default_net_retry->{max} //= 4;
+    my $default_net_retry = $self->{session}->get_conf( 'scapi', 'net_retry' );
+    $default_net_retry->{max}      //= 4;
     $default_net_retry->{interval} //= 30;
     foreach my $k ( keys %{$default_net_retry} )
     {
@@ -133,8 +103,7 @@ sub new
     }
 
     # Other configurable parameters
-    my $doi_field = $self->{session}->get_conf( 'scapi', 'doi_field' ) || 'id_number';
-    $self->{doi_field} = $doi_field;
+    $self->{doi_field} = $self->{session}->get_conf( 'scapi', 'doi_field' ) || 'id_number';
 
     return $self;
 }
@@ -146,10 +115,10 @@ sub can_process
 {
     my( $plugin, $eprint ) = @_;
 
-    if( $eprint->is_set( "scopus_cluster" ) )
+    if( $eprint->is_set( 'scopus_cluster' ) )
     {
-	# do not process eprints with EID set to "-"
-	return 0 if $eprint->get_value( "scopus_cluster" ) eq "-";
+	# do not process eprints with EID set to '-'
+	return 0 if $eprint->get_value( 'scopus_cluster' ) eq '-';
 
 	# otherwise, we can use the existing EID to retrieve data
 	return 1;
@@ -161,13 +130,13 @@ sub can_process
     # Don't do any metadata searches if not configured to do so.
     return 0 unless $plugin->{metadata_search};
 
-    # Scopus doesn't contain data for the following types
-    my $type = $eprint->get_value( "type" );
-    return 0 if $type eq "thesis";
-    return 0 if $type eq "other";
+    # Scopus doesn't contain data for these types, or we don't want
+    # to look them up.
+    my $type = $eprint->get_value( 'type' );
+    return 0 if grep { $type eq $_ } @{ $self->{blacklist_types} };
 
     # otherwise, we can (try to) retrieve data if this eprint has a title and authors
-    return $eprint->is_set( "title" ) && $eprint->is_set( "creators_name" );
+    return $eprint->is_set( 'title' ) && $eprint->is_set( 'creators_name' );
 }
 
 #
@@ -204,7 +173,7 @@ sub get_epdata
 	if( !defined( $response ) )
 	{
 	    # Out of quota. Give up!
-	    die( "Aborting Scopus citation imports." );
+	    die( 'Aborting Scopus citation imports.' );
 	}
 
 	my $body = $response->content;
@@ -282,7 +251,7 @@ sub get_epdata
 
     return undef if( !$found_a_match );
 
-    return $plugin->response_to_epdata( $response_xml, $eprint->get_value( "scopus_cluster" ) );
+    return $plugin->response_to_epdata( $response_xml, $eprint );
 }
 
 #
@@ -375,9 +344,8 @@ sub _get_quoted_param
 
 	    $string =~ s/(^| )&( |$)/ /g;           # isolated ampersands can be removed
 	    $string =~ s/\S*&\S*/" "/g;             # explode tokens with ampersands in them
-	    $string =~ s/^( ?"")? | ("" ?)?$//g;    # clean up
-
-	    $string = '"' . $string . '"';
+	    $string = '"' . $string . '"';          # wrap in quotes
+	    $string =~ s/^(" *" )+|( " *")+$//g;    # clean up leading/trailing empty quotes
 	}
     }
 
@@ -461,30 +429,45 @@ sub get_number_matches
 #
 sub response_to_epdata
 {
-    my( $plugin, $response_xml, $fallback_cluster ) = @_;
+    my( $plugin, $response_xml, $eprint ) = @_;
+
+    my $eprintid = $eprint->id;
+    my $fallback_cluster = $eprint->get_value( 'scopus_cluster' );
 
     my $record = shift @{ $response_xml->getElementsByTagNameNS( $NS_ATOM, "entry" ) };
+
+    my $cluster = $fallback_cluster;
 
     my $eid = shift @{ $record->getElementsByLocalName( "eid" ) };
     if( !defined $eid )
     {
-	$plugin->error(
-		    "Scopus responded with no 'eid' in entry, fallback='$fallback_cluster'. XML:\n" . $response_xml->toString );
+	if( $fallback_cluster )
+	{
+	    $plugin->error(
+			"Scopus responded with no 'eid' in entry for $eprintid, fallback='$fallback_cluster'. XML:\n" . $response_xml->toString );
+	}
+	else
+	{
+	    $plugin->error(
+			"Scopus responded with no 'eid' in entry for $eprintid, and there is no fallback. XML:\n" . $response_xml->toString );
+	    return undef;
+	}
     }
-
-    my $cluster = $fallback_cluster;
-    eval { $cluster = $eid->textContent };
+    else
+    {
+	$cluster = $eid->textContent;
+    }
 
     if( $fallback_cluster && $cluster ne $fallback_cluster )
     {
 	# This is a fatal error -- either we have the wrong eid stored in the database,
 	# or Scopus returned citation counts for the wrong record.  Either way, manual
 	# intervention will be required.
-	$plugin->error( "Scopus returned an 'eid' {$cluster} that doesn't match the existing one {$fallback_cluster}" );
+	$plugin->error( "Scopus returned an 'eid' {$cluster} for $eprintid that doesn't match the existing one {$fallback_cluster}" );
 	return undef;
     }
 
-    my $citation_count = shift @{ $record->getElementsByLocalName( "citedby-count" ) };
+    my $citation_count = shift @{ $record->getElementsByLocalName( 'citedby-count' ) };
     return { cluster => $cluster,
 	     impact  => $citation_count->textContent
     };
