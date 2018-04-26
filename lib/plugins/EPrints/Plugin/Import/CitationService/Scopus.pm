@@ -106,7 +106,7 @@ sub new
     $self->{blacklist_types} = $self->{session}->get_conf( 'scapi', 'blacklist_types' );
     if( !defined( $self->{blacklist_types} ) )
     {
-	$self->{blacklist_types} = qw[ thesis other ];
+	$self->{blacklist_types} = [qw[ thesis other ]];
     }
 
     # get the developer key
