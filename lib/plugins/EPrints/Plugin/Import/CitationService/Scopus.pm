@@ -49,7 +49,7 @@ my $NS_PRISM      = 'http://prismstandard.org/namespaces/basic/2.0/';
 my $NS_OPENSEARCH = 'http://a9.com/-/spec/opensearch/1.1/';
 my $NS_DC         = 'http://purl.org/dc/elements/1.1/';
 
-#
+##
 # Create a new plug-in object.
 #
 sub new
@@ -95,9 +95,29 @@ sub new
     return $self;
 }
 
+##
+# Test whether or not this plug-in can hope to retrieve data for a given eprint.
 #
+# @param $plugin this plugin object
+# @param $eprint the EPrint data object to test
+# @return ($) 0 or 1
+#
+sub can_process
+{
+    my( $plugin, $eprint ) = @_;
+    return $plugin->_query_method_for( $eprint ) ? 1 : 0;
+}
+
+#------- BUILD QUERY
+
+##
 # Pick the query method for the given eprint.  There can be only one.
 # Returns undef is there isn't one.
+#
+# @param $plugin this plugin object
+# @param $eprint the EPrint data object for which to generate a query string
+# @return ($)  the name of the best subroutine to use to generate a query
+#              string for $eprint, or undef
 #
 sub _query_method_for
 {
@@ -129,16 +149,179 @@ sub _query_method_for
     return '_get_querystring_metadata';
 }
 
+##
+# Generate query string for searching by EID.
 #
-# Test whether or not this plug-in can hope to retrieve data for a given eprint.
-#
-sub can_process
+sub _get_querystring_eid
 {
     my( $plugin, $eprint ) = @_;
-    return $plugin->_query_method_for( $eprint ) ? 1 : 0;
+    return undef if(   !$eprint->is_set( 'scopus_cluster' )
+		     || $eprint->get_value( 'scopus_cluster' ) eq '-' );
+    return 'eid(' . $plugin->_get_quoted_param( $eprint->get_value( 'scopus_cluster' ), 1 ) . ')';
 }
 
+##
+# Generate query string for searching by DOI.
 #
+sub _get_querystring_doi
+{
+    my( $plugin, $eprint ) = @_;
+    return undef unless $eprint->is_set( $plugin->{doi_field} );
+
+    my $doi = is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) );
+    return undef unless $doi;
+    return 'doi(' . $plugin->_get_quoted_param( $doi, 1 ) . ')';
+}
+
+##
+# Generate query string for searching by metadata.
+# Uses title, creators_name (if present), date (if present).
+#
+# Can be disabled by setting `$c->{scapi}->{metadata_search} = 0;`
+#
+sub _get_querystring_metadata
+{
+    my( $plugin, $eprint ) = @_;
+
+    # search using title and first author
+
+    my $query = 'title(' . $plugin->_get_quoted_param( $eprint->get_value( 'title' ) ) . ')';
+
+    my @authors = @{ $eprint->value( 'creators_name' ) || [] };
+    if( scalar( @authors ) > 0 )
+    {
+	my $authlastname = $authors[ 0 ]->{family};
+	$query .= ' AND authlastname(' . $plugin->_get_quoted_param( $authlastname ) . ')';
+    }
+
+    if( $eprint->is_set( 'date' ) )
+    {
+	# limit by publication year
+	my $pubyear = substr( $eprint->get_value( 'date' ), 0, 4 );
+	$query .= " AND pubyear is $pubyear";
+    }
+
+    return $query;
+}
+
+##
+# Escape a query parameter so it will be more acceptable to Scopus.
+#
+# @param $plugin this plugin object
+# @param $string the parameter to escape
+# @param $exact  if given and true, attempt to quote $string literally
+# @return ($) the quoted parameter string
+#
+sub _get_quoted_param
+{
+    my( $plugin, $string, $exact ) = @_;
+
+    # Decompose ligatures into component characters - Scopus doesn't
+    # match ligatures. Note, this is a compatibility normalisation
+    # that changes characters and potentially this could change the
+    # string sufficiently so that Scopus won't find a match.
+    $string = NFKC( $string ) // '';
+
+    # If there are any "unsimple" characters, wrap the whole deal
+    # in quotes.  Just in case.
+    if( $string =~ /[^A-Z0-9\/.-]/i )
+    {
+	# Experimentation shows that percent signs cause a GENERAL_SYSTEM_ERROR
+	# in the server.  In that case, return a best-effort (non-exact) query
+	# that strips them as punctuation.
+	#
+	# Similary, ampersands seem to be unsearchable, and are handled explicitly
+	# when creating a non-exact query (below).
+	#
+	if( $exact && $string !~ /{}%&/ )
+	{
+	    $string = '{' . $string . '}';
+	}
+	else
+	{
+	    # When searching for a loose or approximate phrase (using double-quotation
+	    # marks) punctuation is ignored.
+	    #   <http://api.elsevier.com/documentation/search/SCOPUSSearchTips.htm>
+	    #
+	    # Experimentation shows that ampersands are often replaced with the word
+	    # 'and' in stored metadata, but in some cases (e.g. "S&P 500") they are an
+	    # integral part of the token.  Our best effort in this case is to explode
+	    # the string on all words-that-include-ampersands.
+	    #   e.g: ("a x&y b & c") => ("a" "b c")
+
+	    $string =~ s/[^\pL\pN&]+/ /g;    # strip all punctuation, except '&'
+
+	    $string =~ s/(^| )&( |$)/ /g;           # isolated ampersands can be removed
+	    $string =~ s/\S*&\S*/" "/g;             # explode tokens with ampersands in them
+	    $string = '"' . $string . '"';          # wrap in quotes
+	    $string =~ s/^(" *" )+|( " *")+$//g;    # clean up leading/trailing empty quotes
+	}
+    }
+
+    return $string;
+}
+
+##
+# Given a candidate DOI string, return a sanitised version or undef.
+#
+# Ideally, we would be able to encode all DOIs in such a manner as to make them
+# acceptable to Scopus. However, we do not have any documentation as to how
+# problem characters might be encoded, or even any assurance that it is
+# possible at all.
+#
+# @param $doi a candidate DOI string
+# @return ($) the sanitised version of the DOI as a string, if it's valid;
+#             otherwise undef
+#
+sub is_usable_doi
+{
+    my( $doi ) = @_;
+
+    return undef if( !EPrints::Utils::is_set( $doi ) );
+
+    if( eval { require EPrints::DOI; } )
+    {
+	$doi = EPrints::DOI->parse( $string );
+	return $doi ? $doi->to_string( noprefix => 1 ) : undef;
+    }
+    else
+    {
+	# dodgy fallback
+
+	$doi = "$doi";
+	$doi =~ s!^https?://+(dx\.)?doi\.org/+!!i;
+	$doi =~ s!^info:(doi/+)?!!i;
+	$doi =~ s!^doi:!!i;
+
+	return undef if( $doi !~ m!^10\.[^/]+/! );
+
+	return $doi;
+    }
+}
+
+##
+# Build a URI object from the given search parameter.
+# Uses global $SEARCHAPI, and the `dev_id` config param.
+#
+# @param $plugin this plugin object
+# @param $search a search parameter (string)
+# @return ($) a URI object
+#
+sub _get_query_uri
+{
+    my( $plugin, $search ) = @_;
+
+    my $quri = $SEARCHAPI->clone;
+    $quri->query_form( httpAccept => 'application/xml',
+		       apiKey     => $plugin->{dev_id},
+		       query      => $search,
+    );
+    return $quri;
+}
+
+#------- Execute query
+
+##
 # Returns an epdata hashref for a citation datum for $eprint or undef
 # if no matches were found in the citation service.
 #
@@ -252,106 +435,15 @@ sub get_epdata
     return $plugin->response_to_epdata( $response_xml, $eprint );
 }
 
-#
-# Query methods return a valid query string or undef if the string
-# couldn't be generated.
-#
+#------- Response handling
 
-sub _get_quoted_param
-{
-    my( $plugin, $string, $exact ) = @_;
-
-    # Decompose ligatures into component characters - Scopus doesn't
-    # match ligatures. Note, this is a compatibility normalisation
-    # that changes characters and potentially this could change the
-    # string sufficiently so that Scopus won't find a match.
-    $string = NFKC( $string ) // '';
-
-    # If there are any "unsimple" characters, wrap the whole deal
-    # in quotes.  Just in case.
-    if( $string =~ /[^A-Z0-9\/.-]/i )
-    {
-	# Experimentation shows that percent signs cause a GENERAL_SYSTEM_ERROR
-	# in the server.  In that case, return a best-effort (non-exact) query
-	# that strips them as punctuation.
-	#
-	# Similary, ampersands seem to be unsearchable, and are handled explicitly
-	# when creating a non-exact query (below).
-	#
-	if( $exact && $string !~ /{}%&/ )
-	{
-	    $string = '{' . $string . '}';
-	}
-	else
-	{
-	    # When searching for a loose or approximate phrase (using double-quotation
-	    # marks) punctuation is ignored.
-	    #   <http://api.elsevier.com/documentation/search/SCOPUSSearchTips.htm>
-	    #
-	    # Experimentation shows that ampersands are often replaced with the word
-	    # 'and' in stored metadata, but in some cases (e.g. "S&P 500") they are an
-	    # integral part of the token.  Our best effort in this case is to explode
-	    # the string on all words-that-include-ampersands.
-	    #   e.g: ("a x&y b & c") => ("a" "b c")
-
-	    $string =~ s/[^\pL\pN&]+/ /g;    # strip all punctuation, except '&'
-
-	    $string =~ s/(^| )&( |$)/ /g;           # isolated ampersands can be removed
-	    $string =~ s/\S*&\S*/" "/g;             # explode tokens with ampersands in them
-	    $string = '"' . $string . '"';          # wrap in quotes
-	    $string =~ s/^(" *" )+|( " *")+$//g;    # clean up leading/trailing empty quotes
-	}
-    }
-
-    return $string;
-}
-
-sub _get_querystring_eid
-{
-    my( $plugin, $eprint ) = @_;
-    return undef if(   !$eprint->is_set( 'scopus_cluster' )
-		     || $eprint->get_value( 'scopus_cluster' ) eq '-' );
-    return 'eid(' . $plugin->_get_quoted_param( $eprint->get_value( 'scopus_cluster' ), 1 ) . ')';
-}
-
-sub _get_querystring_doi
-{
-    my( $plugin, $eprint ) = @_;
-    return undef unless $eprint->is_set( $plugin->{doi_field} );
-
-    my $doi = is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) );
-    return undef unless $doi;
-    return 'doi(' . $plugin->_get_quoted_param( $doi, 1 ) . ')';
-}
-
-sub _get_querystring_metadata
-{
-    my( $plugin, $eprint ) = @_;
-
-    # search using title and first author
-
-    my $query = 'title(' . $plugin->_get_quoted_param( $eprint->get_value( 'title' ) ) . ')';
-
-    my @authors = @{ $eprint->value( 'creators_name' ) || [] };
-    if( scalar( @authors ) > 0 )
-    {
-	my $authlastname = $authors[ 0 ]->{family};
-	$query .= ' AND authlastname(' . $plugin->_get_quoted_param( $authlastname ) . ')';
-    }
-
-    if( $eprint->is_set( 'date' ) )
-    {
-	# limit by publication year
-	my $pubyear = substr( $eprint->get_value( 'date' ), 0, 4 );
-	$query .= " AND pubyear is $pubyear";
-    }
-
-    return $query;
-}
-
-#
+##
 # Return the content of the status/statusCode and status/statusText elements
 # from an error response
+#
+# @param $plugin this plugin object
+# @param $response_xml the XML structure to interrogate
+# @return ($,$) status code and description
 #
 sub get_response_status
 {
@@ -362,24 +454,29 @@ sub get_response_status
 	     $status->getChildrenByTagName( 'statusText' )->[ 0 ]->textContent, );
 }
 
-#
-# Return the number of records matched and returned in $response_xml
-#
-sub get_number_matches
-{
-    my( $plugin, $response_xml ) = @_;
+# ##
+# # Return the number of records matched and returned in $response_xml
+# #
+# sub get_number_matches
+# {
+#     my( $plugin, $response_xml ) = @_;
+# 
+#     my $totalResults = $response_xml->getElementsByTagNameNS( $NS_OPENSEARCH, "totalResults" )->[ 0 ];
+# 
+#     return 0 if !defined $totalResults;
+#     return $totalResults->textContent + 0;
+# }
 
-    my $totalResults = $response_xml->getElementsByTagNameNS( $NS_OPENSEARCH, "totalResults" )->[ 0 ];
-
-    return 0 if !defined $totalResults;
-    return $totalResults->textContent + 0;
-}
-
-#
+##
 # Convert the response from Scopus into an "epdata" hash.
 #
 # Assumes that this is response returned a 200 OK response and
 # there were matches to the query.
+#
+# @param $plugin this plugin object
+# @param $response_xml the XML object to interrogate
+# @param $eprint the EPrint data object the query was about
+# @return {cluster=>$,impact=>$} the EID and citation count
 #
 sub response_to_epdata
 {
@@ -477,10 +574,16 @@ sub _is_fatal
     return grep { $_ == $code } ( 400, 401, 403, 429 );
 }
 
-#
+##
 # Make an HTTP GET request to $uri and return the response. Will retry
 # up to $max_retries times after $retry_delay in the event of a
 # failure.
+#
+# @param $plugin this plugin object
+# @param $uri    where to send the request
+# @param $max_retries how many times to try again after a non-fatal error
+# @param $retry_delay how long to wait (seconds) between retries
+# @return ($) a HTTP::Response object, or undef if we ran out of quota
 #
 sub _call
 {
@@ -523,52 +626,6 @@ sub _call
 	}
     }
     return $response;
-}
-
-#
-# Return the valid DOI as a string if a given DOI is usable for searching Scopus, or undef if it is not.
-#
-# Ideally, we would be able to encode all DOIs in such a manner as to make them
-# acceptable to Scopus. However, we do not have any documentation as to how
-# problem characters might be encoded, or even any assurance that it is
-# possible at all.
-#
-sub is_usable_doi
-{
-    my( $doi ) = @_;
-
-    return undef if( !EPrints::Utils::is_set( $doi ) );
-
-    if( eval { require EPrints::DOI; } )
-    {
-	$doi = EPrints::DOI->parse( $string );
-	return $doi ? $doi->to_string( noprefix => 1 ) : undef;
-    }
-    else
-    {
-	# dodgy fallback
-
-	$doi = "$doi";
-	$doi =~ s!^https?://+(dx\.)?doi\.org/+!!i;
-	$doi =~ s!^info:(doi/+)?!!i;
-	$doi =~ s!^doi:!!i;
-
-	return undef if( $doi !~ m!^10\.[^/]+/! );
-
-	return $doi;
-    }
-}
-
-sub _get_query_uri
-{
-    my( $plugin, $search ) = @_;
-
-    my $quri = $SEARCHAPI->clone;
-    $quri->query_form( httpAccept => 'application/xml',
-		       apiKey     => $plugin->{dev_id},
-		       query      => $search,
-    );
-    return $quri;
 }
 
 1;
