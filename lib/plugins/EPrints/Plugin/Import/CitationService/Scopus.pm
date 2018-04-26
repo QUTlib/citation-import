@@ -125,7 +125,7 @@ sub new
 
     # Plugin-specific net_retry parameters (command line > config > default)
     my $default_net_retry = $self->{session}->get_conf( "scapi", "net_retry" );
-    $default_net_retry->{max} //= 4;
+    $default_net_retry->{max}      //= 4;
     $default_net_retry->{interval} //= 30;
     foreach my $k ( keys %{$default_net_retry} )
     {
@@ -282,7 +282,7 @@ sub get_epdata
 
     return undef if( !$found_a_match );
 
-    return $plugin->response_to_epdata( $response_xml, $eprint->get_value( "scopus_cluster" ) );
+    return $plugin->response_to_epdata( $response_xml, $eprint );
 }
 
 #
@@ -461,26 +461,41 @@ sub get_number_matches
 #
 sub response_to_epdata
 {
-    my( $plugin, $response_xml, $fallback_cluster ) = @_;
+    my( $plugin, $response_xml, $eprint ) = @_;
+
+    my $eprintid = $eprint->id;
+    my $fallback_cluster = $eprint->get_value( 'scopus_cluster' );
 
     my $record = shift @{ $response_xml->getElementsByTagNameNS( $NS_ATOM, "entry" ) };
+
+    my $cluster = $fallback_cluster;
 
     my $eid = shift @{ $record->getElementsByLocalName( "eid" ) };
     if( !defined $eid )
     {
-	$plugin->error(
-		    "Scopus responded with no 'eid' in entry, fallback='$fallback_cluster'. XML:\n" . $response_xml->toString );
+	if( $fallback_cluster )
+	{
+	    $plugin->error(
+			"Scopus responded with no 'eid' in entry for $eprintid, fallback='$fallback_cluster'. XML:\n" . $response_xml->toString );
+	}
+	else
+	{
+	    $plugin->error(
+			"Scopus responded with no 'eid' in entry for $eprintid, and there is no fallback. XML:\n" . $response_xml->toString );
+	    return undef;
+	}
     }
-
-    my $cluster = $fallback_cluster;
-    eval { $cluster = $eid->textContent };
+    else
+    {
+	$cluster = $eid->textContent;
+    }
 
     if( $fallback_cluster && $cluster ne $fallback_cluster )
     {
 	# This is a fatal error -- either we have the wrong eid stored in the database,
 	# or Scopus returned citation counts for the wrong record.  Either way, manual
 	# intervention will be required.
-	$plugin->error( "Scopus returned an 'eid' {$cluster} that doesn't match the existing one {$fallback_cluster}" );
+	$plugin->error( "Scopus returned an 'eid' {$cluster} for $eprintid that doesn't match the existing one {$fallback_cluster}" );
 	return undef;
     }
 
