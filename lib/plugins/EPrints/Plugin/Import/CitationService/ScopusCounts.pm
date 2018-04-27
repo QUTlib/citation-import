@@ -3,13 +3,13 @@ package EPrints::Plugin::Import::CitationService::ScopusCounts;
 use strict;
 
 use EPrints::Plugin::Import::CitationService;
-our @ISA = ( "EPrints::Plugin::Import::CitationService" );
+our @ISA = ( 'EPrints::Plugin::Import::CitationService' );
 
 use LWP::UserAgent;
 use Unicode::Normalize qw(NFKC);
 use URI;
 
-my $COUNTAPI  = URI->new( "http://api.elsevier.com/content/abstract/citation-count" );  # https://api.elsevier.com/documentation/AbstractCitationCountAPI.wadl
+my $COUNTAPI  = URI->new( 'http://api.elsevier.com/content/abstract/citation-count' );  # https://api.elsevier.com/documentation/AbstractCitationCountAPI.wadl
 
 sub new
 {
@@ -18,10 +18,10 @@ sub new
     my $self = $class->SUPER::new( %params );
 
     # set some parameters
-    $self->{name} = "Scopus Citation Count Ingest";
+    $self->{name} = 'Scopus Citation Count Ingest';
 
     # get the developer key
-    $self->{dev_id} = $self->{session}->get_conf( "scapi", "developer_id" );
+    $self->{dev_id} = $self->{session}->get_conf( 'scapi', 'developer_id' );
     if( !defined( $self->{dev_id} ) )
     {
 	$self->{error}   = 'Unable to load the Scopus developer key.';
@@ -30,7 +30,7 @@ sub new
     }
 
     # Plugin-specific net_retry parameters (command line > config > default)
-    my $net_retry = $self->{session}->get_conf( "scapi", "net_retry" ) || {};
+    my $net_retry = $self->{session}->get_conf( 'scapi', 'net_retry' ) || {};
     $net_retry->{max} //= 4;
     $net_retry->{interval} //= 30;
     foreach my $k ( keys %{$net_retry} )
@@ -63,7 +63,7 @@ sub process_eprints
 
 	if( $eprint )
 	{
-	    # preference 1: use the Scopus EID (if not "-")
+	    # preference 1: use the Scopus EID (if not '-')
 	    if( $eprint->is_set( 'scopus_cluster' ) )
 	    {
 		my $eid = $eprint->get_value( 'scopus_cluster' );
