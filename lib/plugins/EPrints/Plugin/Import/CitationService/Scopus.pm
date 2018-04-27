@@ -49,7 +49,7 @@ my $NS_PRISM      = 'http://prismstandard.org/namespaces/basic/2.0/';
 my $NS_OPENSEARCH = 'http://a9.com/-/spec/opensearch/1.1/';
 my $NS_DC         = 'http://purl.org/dc/elements/1.1/';
 
-#
+##
 # Create a new plug-in object.
 #
 sub new
@@ -68,7 +68,7 @@ sub new
     $self->{blacklist_types} = $self->{session}->get_conf( 'scapi', 'blacklist_types' );
     if( !defined( $self->{blacklist_types} ) )
     {
-	$self->{blacklist_types} = [qw[ thesis other ]];
+	$self->{blacklist_types} = [ qw[ thesis other ] ];
     }
 
     # get the developer key
@@ -79,19 +79,6 @@ sub new
 	$self->{disable} = 1;
 	return $self;
     }
-
-    # An ordered list of the methods for generating querystrings
-    $self->{queries} = [
-	qw{
-	  _get_querystring_eid
-	  _get_querystring_doi
-	  }
-    ];
-    if( $self->{metadata_search} )
-    {
-	push @{ $self->{queries} }, '_get_querystring_metadata';
-    }
-    $self->{current_query} = -1;
 
     # Plugin-specific net_retry parameters (command line > config > default)
     my $default_net_retry = $self->{session}->get_conf( 'scapi', 'net_retry' );
@@ -108,201 +95,124 @@ sub new
     return $self;
 }
 
-#
+##
 # Test whether or not this plug-in can hope to retrieve data for a given eprint.
+#
+# @param $plugin this plugin object
+# @param $eprint the EPrint data object to test
+# @return ($) 0 or 1
 #
 sub can_process
 {
     my( $plugin, $eprint ) = @_;
+    return $plugin->_query_method_for( $eprint ) ? 1 : 0;
+}
 
+#------- BUILD QUERY
+
+##
+# Pick the query method for the given eprint.  There can be only one.
+# Returns undef is there isn't one.
+#
+# @param $plugin this plugin object
+# @param $eprint the EPrint data object for which to generate a query string
+# @return ($)  the name of the best subroutine to use to generate a query
+#              string for $eprint, or undef
+#
+sub _query_method_for
+{
+    my( $plugin, $eprint ) = @_;
+
+    # Having a scopus cluster (EID) trumps all other considerations.
     if( $eprint->is_set( 'scopus_cluster' ) )
     {
 	# do not process eprints with EID set to '-'
-	return 0 if $eprint->get_value( 'scopus_cluster' ) eq '-';
+	return undef if $eprint->get_value( 'scopus_cluster' ) eq '-';
 
 	# otherwise, we can use the existing EID to retrieve data
-	return 1;
+	return '_get_querystring_eid';
     }
-
-    # we can retrieve data if this eprint has a (usable) DOI
-    return 1 if( $eprint->is_set( $plugin->{doi_field} ) && is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) ) );
-
-    # Don't do any metadata searches if not configured to do so.
-    return 0 unless $plugin->{metadata_search};
 
     # Scopus doesn't contain data for these types, or we don't want
     # to look them up.
     my $type = $eprint->get_value( 'type' );
-    return 0 if grep { $type eq $_ } @{ $self->{blacklist_types} };
+    return undef if grep { $type eq $_ } @{ $self->{blacklist_types} };
+
+    # we can retrieve data if this eprint has a (usable) DOI
+    return '_get_querystring_doi'
+      if( $eprint->is_set( $plugin->{doi_field} ) && is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) ) );
+
+    # Don't do any metadata searches if not configured to do so.
+    return undef unless $plugin->{metadata_search};
 
     # otherwise, we can (try to) retrieve data if this eprint has a title and authors
-    return $eprint->is_set( 'title' ) && $eprint->is_set( 'creators_name' );
+    return undef unless $eprint->is_set( 'title' ) && $eprint->is_set( 'creators_name' );
+    return '_get_querystring_metadata';
 }
 
+##
+# Generate query string for searching by EID.
 #
-# Returns an epdata hashref for a citation datum for $eprint or undef
-# if no matches were found in the citation service.
+sub _get_querystring_eid
+{
+    my( $plugin, $eprint ) = @_;
+    return undef if(   !$eprint->is_set( 'scopus_cluster' )
+		     || $eprint->get_value( 'scopus_cluster' ) eq '-' );
+    return 'eid(' . $plugin->_get_quoted_param( $eprint->get_value( 'scopus_cluster' ), 1 ) . ')';
+}
+
+##
+# Generate query string for searching by DOI.
 #
-# Croaks if there are problems receiving or parsing responses from the
-# citation service, or if the citation service returns an error
-# response.
+sub _get_querystring_doi
+{
+    my( $plugin, $eprint ) = @_;
+    return undef unless $eprint->is_set( $plugin->{doi_field} );
+
+    my $doi = is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) );
+    return undef unless $doi;
+    return 'doi(' . $plugin->_get_quoted_param( $doi, 1 ) . ')';
+}
+
+##
+# Generate query string for searching by metadata.
+# Uses title, creators_name (if present), date (if present).
 #
-sub get_epdata
+# Can be disabled by setting `$c->{scapi}->{metadata_search} = 0;`
+#
+sub _get_querystring_metadata
 {
     my( $plugin, $eprint ) = @_;
 
-    my $eprintid = $eprint->get_id();
+    # search using title and first author
 
-    # Repeatedly query the citation service until a matching record is
-    # found or all query methods have been tried without success.
-    my $response_xml;
-    my $found_a_match = 0;
-    $plugin->_reset_query_methods();
-  QUERY_METHOD: while( !$found_a_match && defined $plugin->_next_query_method() )
+    my $query = 'title(' . $plugin->_get_quoted_param( $eprint->get_value( 'title' ) ) . ')';
+
+    my @authors = @{ $eprint->value( 'creators_name' ) || [] };
+    if( scalar( @authors ) > 0 )
     {
-	my $search = $plugin->_get_query( $eprint );
-	next QUERY_METHOD if( !defined $search );
-
-	# build the URL from which we can download the data
-	my $quri = $plugin->_get_query_uri( $search );
-
-	# Repeatedly query the citation service until a response is
-	# received or max allowed network requests has been reached.
-	my $response = $plugin->_call( $quri, $plugin->{net_retry}->{max}, $plugin->{net_retry}->{interval} );
-
-	if( !defined( $response ) )
-	{
-	    # Out of quota. Give up!
-	    die( 'Aborting Scopus citation imports.' );
-	}
-
-	my $body = $response->content;
-	my $code = $response->code;
-	if( !$body )
-	{
-	    $plugin->warning( "No or empty response from Scopus for EPrint ID $eprintid [$code]" );
-	    next QUERY_METHOD;
-	}
-
-	# Got a response, now try to parse it
-	my $xml_parser = $plugin->{session}->xml;
-
-	my $status_code;
-	my $status_detail;
-
-	eval {
-	    $response_xml = $xml_parser->parse_string( $body );
-	    1;
-	  }
-	  or do
-	{
-	    # Workaround for malformed XML error responses --
-	    # parse out the status code and detail using regexes
-	    $plugin->warning( "Received malformed XML error response {$@}" );
-	    if( $body =~ m/<statusCode[^>]*>(.+?)<\/statusCode>/g )
-	    {
-		$status_code = $1;
-	    }
-	    if( $body =~ m/<statusText[^>]*>(.+?)<\/statusText>/g )
-	    {
-		$status_detail = $1;
-	    }
-	    if( $status_code || $status_detail )
-	    {
-		$status_code   ||= '-';
-		$status_detail ||= '-';
-		$plugin->error(
-"Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: "
-		      . $quri->as_string );
-	    }
-	    else
-	    {
-		$plugin->warning( "Unable to parse response XML for EPrint ID $eprintid: [$code] Request URL: " .
-				  $quri->as_string . "\n$body" );
-	    }
-	    next QUERY_METHOD;
-	};
-
-	if( $code != 200 )
-	{
-	    # Don't die on errors because these may be caused by data
-	    # specific to a given eprint and dying would prevent
-	    # updates for the remaining eprints
-	    ( $status_code, $status_detail ) = $plugin->get_response_status( $response_xml );
-	    if( $status_code || $status_detail )
-	    {
-		$status_code   ||= '-';
-		$status_detail ||= '-';
-		$plugin->error(
-"Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: "
-		      . $quri->as_string );
-	    }
-	    else
-	    {
-		$plugin->error( "Scopus responded with unknown error condition for EPrint ID $eprintid: [$code] Request URL: " .
-				$quri->as_string . "\n" . $response_xml->toString );
-	    }
-	    next QUERY_METHOD;
-	}
-
-	$found_a_match = ( $plugin->get_number_matches( $response_xml ) > 0 );
-
-    }    # End QUERY_METHOD
-
-    return undef if( !$found_a_match );
-
-    return $plugin->response_to_epdata( $response_xml, $eprint );
-}
-
-#
-# Select the next query method. Returns the
-# zero-based index thereof, or undef if all query options are
-# exhausted.
-#
-# By default these return undef, so concrete plugins don't need to
-# override.
-#
-sub _next_query_method
-{
-    my( $plugin ) = @_;
-    if( $plugin->{current_query} >= ( scalar @{ $plugin->{queries} } - 1 ) )
-    {
-	$plugin->{current_query} = undef;
-	return undef;
+	my $authlastname = $authors[ 0 ]->{family};
+	$query .= ' AND authlastname(' . $plugin->_get_quoted_param( $authlastname ) . ')';
     }
-    return $plugin->{current_query}++;
+
+    if( $eprint->is_set( 'date' ) )
+    {
+	# limit by publication year
+	my $pubyear = substr( $eprint->get_value( 'date' ), 0, 4 );
+	$query .= " AND pubyear is $pubyear";
+    }
+
+    return $query;
 }
 
+##
+# Escape a query parameter so it will be more acceptable to Scopus.
 #
-# Start iterating through the list of query methods again.
+# @param $plugin this plugin object
+# @param $string the parameter to escape
+# @param $exact  if given and true, attempt to quote $string literally
+# @return ($) the quoted parameter string
 #
-# next_query_method() must be called before the next query after a
-# call to this.
-#
-sub _reset_query_methods
-{
-    my( $plugin ) = @_;
-    $plugin->{current_query} = -1;
-    return;
-}
-
-#
-# Return the query string from the current query method or undef if it
-# can't be created, e.g., if the eprint doesn't have the required
-# metadata for that query.
-#
-sub _get_query
-{
-    my( $plugin, $eprint ) = @_;
-    my $query_generator_fname = $plugin->{queries}->[ $plugin->{current_query} ];
-    return $plugin->$query_generator_fname( $eprint );
-}
-
-#
-# Query methods return a valid query string or undef if the string
-# couldn't be generated.
-#
-
 sub _get_quoted_param
 {
     my( $plugin, $string, $exact ) = @_;
@@ -342,8 +252,8 @@ sub _get_quoted_param
 
 	    $string =~ s/[^\pL\pN&]+/ /g;    # strip all punctuation, except '&'
 
-	    $string =~ s/(^| )&( |$)/ /g;           # isolated ampersands can be removed
-	    $string =~ s/\S*&\S*/" "/g;             # explode tokens with ampersands in them
+	    $string =~ s/(^| )&( |$)/ /g;    # isolated ampersands can be removed
+	    $string =~ s/\S*&\S*/" "/g;      # explode tokens with ampersands in them
 	    $string = '"' . $string . '"';          # wrap in quotes
 	    $string =~ s/^(" *" )+|( " *")+$//g;    # clean up leading/trailing empty quotes
 	}
@@ -352,52 +262,190 @@ sub _get_quoted_param
     return $string;
 }
 
-sub _get_querystring_eid
-{
-    my( $plugin, $eprint ) = @_;
-    return undef if(   !$eprint->is_set( 'scopus_cluster' )
-		     || $eprint->get_value( 'scopus_cluster' ) eq '-' );
-    return 'eid(' . $plugin->_get_quoted_param( $eprint->get_value( 'scopus_cluster' ), 1 ) . ')';
-}
-
-sub _get_querystring_doi
-{
-    my( $plugin, $eprint ) = @_;
-    return undef unless $eprint->is_set( $plugin->{doi_field} );
-
-    my $doi = is_usable_doi( $eprint->get_value( $plugin->{doi_field} ) );
-    return undef unless $doi;
-    return 'doi(' . $plugin->_get_quoted_param( $doi, 1 ) . ')';
-}
-
-sub _get_querystring_metadata
-{
-    my( $plugin, $eprint ) = @_;
-
-    # search using title and first author
-
-    my $query = 'title(' . $plugin->_get_quoted_param( $eprint->get_value( 'title' ) ) . ')';
-
-    my @authors = @{ $eprint->value( 'creators_name' ) || [] };
-    if( scalar( @authors ) > 0 )
-    {
-	my $authlastname = $authors[ 0 ]->{family};
-	$query .= ' AND authlastname(' . $plugin->_get_quoted_param( $authlastname ) . ')';
-    }
-
-    if( $eprint->is_set( 'date' ) )
-    {
-	# limit by publication year
-	my $pubyear = substr( $eprint->get_value( 'date' ), 0, 4 );
-	$query .= " AND pubyear is $pubyear";
-    }
-
-    return $query;
-}
-
+##
+# Given a candidate DOI string, return a sanitised version or undef.
 #
+# Ideally, we would be able to encode all DOIs in such a manner as to make them
+# acceptable to Scopus. However, we do not have any documentation as to how
+# problem characters might be encoded, or even any assurance that it is
+# possible at all.
+#
+# @param $doi a candidate DOI string
+# @return ($) the sanitised version of the DOI as a string, if it's valid;
+#             otherwise undef
+#
+sub is_usable_doi
+{
+    my( $doi ) = @_;
+
+    return undef if( !EPrints::Utils::is_set( $doi ) );
+
+    if( eval { require EPrints::DOI; } )
+    {
+	$doi = EPrints::DOI->parse( $string );
+	return $doi ? $doi->to_string( noprefix => 1 ) : undef;
+    }
+    else
+    {
+	# dodgy fallback
+
+	$doi = "$doi";
+	$doi =~ s!^https?://+(dx\.)?doi\.org/+!!i;
+	$doi =~ s!^info:(doi/+)?!!i;
+	$doi =~ s!^doi:!!i;
+
+	return undef if( $doi !~ m!^10\.[^/]+/! );
+
+	return $doi;
+    }
+}
+
+##
+# Build a URI object from the given search parameter.
+# Uses global $SEARCHAPI, and the `dev_id` config param.
+#
+# @param $plugin this plugin object
+# @param $search a search parameter (string)
+# @return ($) a URI object
+#
+sub _get_query_uri
+{
+    my( $plugin, $search ) = @_;
+
+    my $quri = $SEARCHAPI->clone;
+    $quri->query_form(
+		       httpAccept => 'application/xml',
+		       apiKey     => $plugin->{dev_id},
+		       query      => $search,
+    );
+    return $quri;
+}
+
+#------- Execute query
+
+##
+# Returns an epdata hashref for a citation datum for $eprint or undef
+# if no matches were found in the citation service.
+#
+# Croaks if there are problems receiving or parsing responses from the
+# citation service, or if the citation service returns an error
+# response.
+#
+sub get_epdata
+{
+    my( $plugin, $eprint ) = @_;
+
+    my $eprintid = $eprint->get_id();
+
+    # Which method do we use to fetch citation counts?
+    my $method = $plugin->_query_method_for( $eprint );
+    if( !$method )
+    {
+	$plugin->error( "Attempting to lookup EPrint $eprintid but I don't know how!" );
+	return undef;
+    }
+
+    my $response_xml;
+    my $search = $plugin->$method( $eprint );
+    if( !$search )
+    {
+	$plugin->error( "Unable to generate query for EPrint $eprintid using $method" );
+	return undef;
+    }
+
+    my $quri = $plugin->_get_query_uri( $search );
+
+    # Repeatedly query the citation service until a response is
+    # received or max allowed network requests has been reached.
+    my $response = $plugin->_call( $quri, $plugin->{net_retry}->{max}, $plugin->{net_retry}->{interval} );
+
+    if( !defined( $response ) )
+    {
+	# Out of quota. Give up!
+	die( 'Aborting Scopus citation imports.' );
+    }
+
+    my $body = $response->content;
+    my $code = $response->code;
+    if( !$body )
+    {
+	$plugin->error( "No or empty response from Scopus for EPrint $eprintid [$code]" );
+	return undef;
+    }
+
+    # Got a response, now try to parse it
+    my $xml_parser = $plugin->{session}->xml;
+
+    my $status_code;
+    my $status_detail;
+
+    eval {
+	$response_xml = $xml_parser->parse_string( $body );
+	1;
+      }
+      or do
+    {
+	# Workaround for malformed XML error responses --
+	# parse out the status code and detail using regexes
+	$plugin->warning( "Received malformed XML error response {$@}" );
+	if( $body =~ m/<statusCode[^>]*>(.+?)<\/statusCode>/g )
+	{
+	    $status_code = $1;
+	}
+	if( $body =~ m/<statusText[^>]*>(.+?)<\/statusText>/g )
+	{
+	    $status_detail = $1;
+	}
+	if( $status_code || $status_detail )
+	{
+	    $status_code   ||= '-';
+	    $status_detail ||= '-';
+	    $plugin->error(
+"Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: "
+		  . $quri->as_string );
+	}
+	else
+	{
+	    $plugin->warning(
+		 "Unable to parse response XML for EPrint ID $eprintid: [$code] Request URL: " . $quri->as_string . "\n$body" );
+	}
+	return undef;
+    };
+
+    if( $code != 200 )
+    {
+	# Don't die on errors because these may be caused by data
+	# specific to a given eprint and dying would prevent
+	# updates for the remaining eprints
+	( $status_code, $status_detail ) = $plugin->get_response_status( $response_xml );
+	if( $status_code || $status_detail )
+	{
+	    $status_code   ||= '-';
+	    $status_detail ||= '-';
+	    $plugin->error(
+"Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: "
+		  . $quri->as_string );
+	}
+	else
+	{
+	    $plugin->error( "Scopus responded with unknown error condition for EPrint ID $eprintid: [$code] Request URL: " .
+			    $quri->as_string . "\n" . $response_xml->toString );
+	}
+	return undef;
+    }
+
+    return $plugin->response_to_epdata( $response_xml, $eprint );
+}
+
+#------- Response handling
+
+##
 # Return the content of the status/statusCode and status/statusText elements
 # from an error response
+#
+# @param $plugin this plugin object
+# @param $response_xml the XML structure to interrogate
+# @return ($,$) status code and description
 #
 sub get_response_status
 {
@@ -408,30 +456,35 @@ sub get_response_status
 	     $status->getChildrenByTagName( 'statusText' )->[ 0 ]->textContent, );
 }
 
+# ##
+# # Return the number of records matched and returned in $response_xml
+# #
+# sub get_number_matches
+# {
+#     my( $plugin, $response_xml ) = @_;
 #
-# Return the number of records matched and returned in $response_xml
+#     my $totalResults = $response_xml->getElementsByTagNameNS( $NS_OPENSEARCH, "totalResults" )->[ 0 ];
 #
-sub get_number_matches
-{
-    my( $plugin, $response_xml ) = @_;
+#     return 0 if !defined $totalResults;
+#     return $totalResults->textContent + 0;
+# }
 
-    my $totalResults = $response_xml->getElementsByTagNameNS( $NS_OPENSEARCH, "totalResults" )->[ 0 ];
-
-    return 0 if !defined $totalResults;
-    return $totalResults->textContent + 0;
-}
-
-#
+##
 # Convert the response from Scopus into an "epdata" hash.
 #
 # Assumes that this is response returned a 200 OK response and
 # there were matches to the query.
 #
+# @param $plugin this plugin object
+# @param $response_xml the XML object to interrogate
+# @param $eprint the EPrint data object the query was about
+# @return {cluster=>$,impact=>$} the EID and citation count
+#
 sub response_to_epdata
 {
     my( $plugin, $response_xml, $eprint ) = @_;
 
-    my $eprintid = $eprint->id;
+    my $eprintid         = $eprint->id;
     my $fallback_cluster = $eprint->get_value( 'scopus_cluster' );
 
     my $record = shift @{ $response_xml->getElementsByTagNameNS( $NS_ATOM, "entry" ) };
@@ -443,13 +496,13 @@ sub response_to_epdata
     {
 	if( $fallback_cluster )
 	{
-	    $plugin->error(
-			"Scopus responded with no 'eid' in entry for $eprintid, fallback='$fallback_cluster'. XML:\n" . $response_xml->toString );
+	    $plugin->error( "Scopus responded with no 'eid' in entry for $eprintid, fallback='$fallback_cluster'. XML:\n" .
+			    $response_xml->toString );
 	}
 	else
 	{
-	    $plugin->error(
-			"Scopus responded with no 'eid' in entry for $eprintid, and there is no fallback. XML:\n" . $response_xml->toString );
+	    $plugin->error( "Scopus responded with no 'eid' in entry for $eprintid, and there is no fallback. XML:\n" .
+			    $response_xml->toString );
 	    return undef;
 	}
     }
@@ -463,12 +516,14 @@ sub response_to_epdata
 	# This is a fatal error -- either we have the wrong eid stored in the database,
 	# or Scopus returned citation counts for the wrong record.  Either way, manual
 	# intervention will be required.
-	$plugin->error( "Scopus returned an 'eid' {$cluster} for $eprintid that doesn't match the existing one {$fallback_cluster}" );
+	$plugin->error(
+		  "Scopus returned an 'eid' {$cluster} for $eprintid that doesn't match the existing one {$fallback_cluster}" );
 	return undef;
     }
 
     my $citation_count = shift @{ $record->getElementsByLocalName( 'citedby-count' ) };
-    return { cluster => $cluster,
+    return {
+	     cluster => $cluster,
 	     impact  => $citation_count->textContent
     };
 }
@@ -506,10 +561,34 @@ sub _log_response
     $plugin->warning( $message );
 }
 
-#
+sub _is_fatal
+{
+    my( $code ) = @_;
+
+    # This treats buggy-looking responses (405,406,500)
+    # as (probably) transient.
+
+    # Documented response codes:
+    #  400 - invalid information
+    #  401 - authentication error
+    #  403 - bad auth/entitlements
+    #  405 - invalid HTTP method -- bug?
+    #  406 - invalid content-type -- bug?
+    #  429 - quota exceeded
+    #  500 - bug
+    return grep { $_ == $code } ( 400, 401, 403, 429 );
+}
+
+##
 # Make an HTTP GET request to $uri and return the response. Will retry
 # up to $max_retries times after $retry_delay in the event of a
 # failure.
+#
+# @param $plugin this plugin object
+# @param $uri    where to send the request
+# @param $max_retries how many times to try again after a non-fatal error
+# @param $retry_delay how long to wait (seconds) between retries
+# @return ($) a HTTP::Response object, or undef if we ran out of quota
 #
 sub _call
 {
@@ -527,7 +606,7 @@ sub _call
     {
 	$response = $ua->get( $uri );
 
-	# Quota exceeded - abort
+	# Quota exceeded -- abort
 	if( $response->code == 429 )
 	{
 	    $plugin->_log_response( $uri, $response );
@@ -537,15 +616,11 @@ sub _call
 	# Some other failure.  Log it, wait a bit, and try again.
 	if( !$response->is_success )
 	{
-	    # TODO: explicitly handle responses
-	    #   400 - invalid information (?)
-	    #   401 - authentication error
-	    #   403 - bad auth/entitlements
-	    #   405 - invalid HTTP method !?
-	    #   406 - invalid content-type !?
-	    #   429 - (handled above)
-	    #   500 - (probably transient) ??
 	    $plugin->_log_response( $uri, $response );
+
+	    # give up on this eprint if things are too weird
+	    return $response if _is_fatal( $response->code );
+
 	    $net_tries_left--;
 	    if( $net_tries_left > 0 && $retry_delay > 0 )
 	    {
@@ -556,52 +631,6 @@ sub _call
 	}
     }
     return $response;
-}
-
-#
-# Return the valid DOI as a string if a given DOI is usable for searching Scopus, or undef if it is not.
-#
-# Ideally, we would be able to encode all DOIs in such a manner as to make them
-# acceptable to Scopus. However, we do not have any documentation as to how
-# problem characters might be encoded, or even any assurance that it is
-# possible at all.
-#
-sub is_usable_doi
-{
-    my( $doi ) = @_;
-
-    return undef if( !EPrints::Utils::is_set( $doi ) );
-
-    if( eval { require EPrints::DOI; } )
-    {
-	$doi = EPrints::DOI->parse( $string );
-	return $doi ? $doi->to_string( noprefix => 1 ) : undef;
-    }
-    else
-    {
-	# dodgy fallback
-
-	$doi = "$doi";
-	$doi =~ s!^https?://+(dx\.)?doi\.org/+!!i;
-	$doi =~ s!^info:(doi/+)?!!i;
-	$doi =~ s!^doi:!!i;
-
-	return undef if( $doi !~ m!^10\.[^/]+/! );
-
-	return $doi;
-    }
-}
-
-sub _get_query_uri
-{
-    my( $plugin, $search ) = @_;
-
-    my $quri = $SEARCHAPI->clone;
-    $quri->query_form( httpAccept => 'application/xml',
-		       apiKey     => $plugin->{dev_id},
-		       query      => $search,
-    );
-    return $quri;
 }
 
 1;
