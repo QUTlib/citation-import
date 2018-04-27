@@ -11,6 +11,8 @@ use URI;
 
 my $COUNTAPI  = URI->new( 'http://api.elsevier.com/content/abstract/citation-count' );  # https://api.elsevier.com/documentation/AbstractCitationCountAPI.wadl
 
+my $BATCHSIZE = 50;
+
 sub new
 {
     my( $class, %params ) = @_;
@@ -43,6 +45,15 @@ sub new
     $self->{doi_field} = $doi_field;
 
     return $self;
+}
+
+# Breaks a list of items into chunks of up to $BATCHSIZE elements,
+# each of which is joined with commas.
+sub _chunk
+{
+    my @chunks;
+    push @chunks, join( ',', splice( @_, 0, $BATCHSIZE ) ) while @_;
+    return @chunks;
 }
 
 #
@@ -86,6 +97,38 @@ sub process_eprints
     }
 
     # request in batches
+    foreach my $chunk ( _chunk @eids )
+    {
+	$plugin->_query( scopus_id => $chunk )
+    }
+    foreach my $chunk ( _chunk @dois )
+    {
+	$plugin->_query( doi => $chunk )
+    }
+}
+
+sub _query
+{
+    my( $plugin, %params ) = @_;
+
+    my $uri = $COUNTAPI->clone;
+    $uri->query_form(
+		      httpAccept => 'application/xml',
+		      apiKey     => $plugin->{dev_id},
+		      %params
+    );
+
+    # FIXME
+    my $RETRIES = 2;
+    my $DELAY = 30;
+
+    my $response = EPrints::Plugin::Import::CitationService::ScopusLookup::_call( $plugin, $uri, $RETRIES, $DELAY );
+
+    if( !defined( $response ) )
+    {
+	# Out of quota. Give up!
+	die( 'Aborting Scopus citation imports.' );
+    }
 }
 
 sub usable_doi
