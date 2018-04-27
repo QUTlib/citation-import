@@ -78,6 +78,11 @@ $c->{scapi}->{blacklist_types} = [qw[
 #$c->{scapi}->{doi_field} = 'id_number';
 
 #
+# Lookup mechanisms to use.
+#
+#$c->{scapi}->{metadata_search} = 1;
+
+#
 # Build the "inward URL" for a paper. If we don't have an EID for this paper,
 # this just returns the URL of Scopus' home page
 #
