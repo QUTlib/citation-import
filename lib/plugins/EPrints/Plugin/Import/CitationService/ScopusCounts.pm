@@ -94,21 +94,27 @@ sub usable_doi
 
     my $NO = ($opts{test} ? 0 : undef);
 
-    return $NO if !$string;
+    return $NO if( !EPrints::Utils::is_set( $doi ) );
 
     if( eval { require EPrints::DOI; } )
     {
-	return EPrints::DOI->parse( $string, %opts );
+	$doi = EPrints::DOI->parse( $string );
+	return $NO unless $doi;
+	return $opts{test} ? 1 : $doi->to_string( noprefix => 1 );
     }
     else
     {
 	# dodgy fallback
-	if( $string =~ m!^\s*(?:https?://[^/]+/+)?(?:info:)?(?:doi:)?(10\.[^/]+/.+?)\s*$!i )
-	{
-	    return 1 if $opts{test};
-	    return $1;
-	}
-	return $NO;
+
+	$doi = "$doi";
+	$doi =~ s!^https?://+(dx\.)?doi\.org/+!!i;
+	$doi =~ s!^info:(doi/+)?!!i;
+	$doi =~ s!^doi:!!i;
+
+	return $NO if( $doi !~ m!^10\.[^/]+/! );
+
+	return 1 if $opts{test};
+	return $doi;
     }
 }
 
