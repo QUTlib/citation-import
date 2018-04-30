@@ -68,6 +68,8 @@ sub process_eprints
 
     my @eids;
     my @dois;
+    my $eid_map;
+    my $doi_map;
   EPRINT: foreach my $eprintid ( @{ $eprintids // [] } )
     {
 	my $eprint = $plugin->{session}->eprint( $eprintid );
@@ -78,7 +80,11 @@ sub process_eprints
 	    if( $eprint->is_set( 'scopus_cluster' ) )
 	    {
 		my $eid = $eprint->get_value( 'scopus_cluster' );
-		push @eids, $eid if $eid ne '-';
+		if( $eid ne '-' )
+		{
+		    push @eids, $eid;
+		    $eid_map->{ $eid } = $eprint;
+		}
 		next EPRINT;
 	    }
 
@@ -86,7 +92,11 @@ sub process_eprints
 	    if( $eprint->is_set( $plugin->{doi_field} ) )
 	    {
 		my $doi = usable_doi( $eprint->get_value( $plugin->{doi_field} ) );
-		push @dois, $doi if $doi;
+		if( $doi )
+		{
+		    push @dois, $doi;
+		    $doi_map->{ $doi } = $eprint;
+		}
 		next EPRINT;
 	    }
 	}
@@ -97,19 +107,20 @@ sub process_eprints
     }
 
     # request in batches
+    my @results;
     foreach my $chunk ( _chunk @eids )
     {
-	$plugin->_query( scopus_id => $chunk )
+	push @results, @{ $plugin->_query( $eid_map, 'scopus_cluster', 'eid', scopus_id => $chunk ) };
     }
     foreach my $chunk ( _chunk @dois )
     {
-	$plugin->_query( doi => $chunk )
+	push @results, @{ $plugin->_query( $doi_map, $plugin->{doi_field}, 'doi', doi => $chunk ) };
     }
 }
 
 sub _query
 {
-    my( $plugin, %params ) = @_;
+    my( $plugin, $map, $fieldname, $element, %params ) = @_;
 
     my $uri = $COUNTAPI->clone;
     $uri->query_form(
@@ -121,7 +132,6 @@ sub _query
     # FIXME
     my $RETRIES = 2;
     my $DELAY = 30;
-
     my $response = EPrints::Plugin::Import::CitationService::ScopusLookup::_call( $plugin, $uri, $RETRIES, $DELAY );
 
     if( !defined( $response ) )
@@ -129,6 +139,167 @@ sub _query
 	# Out of quota. Give up!
 	die( 'Aborting Scopus citation imports.' );
     }
+
+    my $body = $response->content;
+    my $code = $response->code;
+    if( !$body )
+    {
+	$plugin->error( "No or empty response from Scopus for EPrint $eprintid [$code]" );
+	return undef;
+    }
+
+    # Got a response, now try to parse it
+    my $xml_parser = $plugin->{session}->xml;
+
+    my $status_code;
+    my $status_detail;
+
+    eval {
+	$response_xml = $xml_parser->parse_string( $body );
+	1;
+      }
+      or do
+    {
+	# Workaround for malformed XML error responses --
+	# parse out the status code and detail using regexes
+	$plugin->warning( "Received malformed XML error response {$@}" );
+	if( $body =~ m/<statusCode[^>]*>(.+?)<\/statusCode>/g )
+	{
+	    $status_code = $1;
+	}
+	if( $body =~ m/<statusText[^>]*>(.+?)<\/statusText>/g )
+	{
+	    $status_detail = $1;
+	}
+	if( $status_code || $status_detail )
+	{
+	    $status_code   ||= '-';
+	    $status_detail ||= '-';
+	    $plugin->error(
+"Scopus responded with error condition for <$uri>: [$code] $status_code, $status_detail, Request URL: "
+		  . $quri->as_string );
+	}
+	else
+	{
+	    $plugin->warning(
+		 "Unable to parse response XML for <$uri>: [$code] Request URL: " . $quri->as_string . "\n$body" );
+	}
+	return undef;
+    };
+
+    if( $code != 200 )
+    {
+	# Don't die on errors because these may be caused by data
+	# specific to a given eprint and dying would prevent
+	# updates for the remaining eprints
+	( $status_code, $status_detail ) = EPrints::Plugin::Import::CitationService::ScopusLookup::get_response_status( $plugin, $response_xml );
+	if( $status_code || $status_detail )
+	{
+	    $status_code   ||= '-';
+	    $status_detail ||= '-';
+	    $plugin->error(
+"Scopus responded with error condition for <$uri>: [$code] $status_code, $status_detail, Request URL: "
+		  . $quri->as_string );
+	}
+	else
+	{
+	    $plugin->error( "Scopus responded with unknown error condition for <$uri>: [$code] Request URL: " .
+			    $quri->as_string . "\n" . $response_xml->toString );
+	}
+	return undef;
+    }
+
+    my @hits;
+  EPRINT: foreach my $document ( @{ $response_xml->getElementsByLocalName( 'document' ) } )
+    {
+	# TODO: ensure status="found"?
+
+	my $key = $plugin->_extract( $document, $element );
+	next EPRINT unless $key;
+	# TODO: unescape?
+
+	my $eprint = $map->{ $key };
+	if( !$eprint) {
+	    $plugin->error( "returned citations for eprint with $fieldname=$key, but there's no such record in the map" );
+	    next EPRINT;
+	}
+
+	$eprintid = $eprint->id;
+	my $need_save = 0;
+
+	my $new_eid = $plugin->_extract( $document, 'eid' );
+	if( defined $new_eid )
+	{
+	    my $old_eid = $eprint->get_value( 'scopus_cluster' );
+	    if( $old_eid )
+	    {
+		if( $new_eid ne $old_eid )
+		{
+		    $plugin->error( "'eid' $new_eid for $eprintid doesn't match $old_eid in database" );
+		    next EPRINT;
+		}
+	    }
+	    else
+	    {
+		#$eprint->set_value( 'scopus_cluster', $new_eid );
+		#$need_save = 1;
+	    }
+	}
+	else
+	{
+	    $plugin->error( "no eid in response for $eprintid !?" );
+	    next EPRINT;
+	}
+
+	my $new_doi = $plugin->_extract( $document, 'doi', 1 );
+	if( defined $new_doi )
+	{
+	    my $old_doi = $eprint->get_value( $plugin->{doi_field} );
+	    if( $old_doi )
+	    {
+		if( $new_doi ne $old_doi )
+		{
+		    $plugin->error( "'doi' $new_doi for $eprintid doesn't match $old_doi in database" );
+		    #next EPRINT; # meh, who cares, really
+		}
+	    }
+	    else
+	    {
+		$plugin->warning( "Scopus returned DOI $new_doi for $eprintid, which doesn't currently have one" );
+		# FIXME: set field? add to comment? ??
+	    }
+	}
+
+	my $citation_count = $plugin->_extract( $document, 'citation-count' );
+	if( !defined $citation_count )
+	{
+	    $plugin->error( "no citation count in response for $eprintid !?" );
+	    next EPRINT;
+	}
+	push @hits, { cluster => $new_eid, impact => $citation_count };
+    }
+
+    return @hits;
+}
+
+sub _extract
+{
+    my( $plugin, $container_node, $element_name, $quiet );
+    my $element = shift @{ $container_node->getElementsByLocalName( $element_name ) };
+    if( !$element )
+    {
+	$plugin->warning( "no <$element_name/>" ) unless $quiet;
+	return undef;
+    }
+
+    my $value = $element->text_content;
+    if( !EPrints::Utils::is_set( $value ) )
+    {
+	$plugin->error( "<$element_name/> has no value" ) unless $quiet;
+	return undef;
+    }
+
+    return $value;
 }
 
 sub usable_doi
