@@ -116,6 +116,30 @@ sub process_eprints
     {
 	push @results, @{ $plugin->_query( $doi_map, $plugin->{doi_field}, 'doi', doi => $chunk ) };
     }
+
+    # convert into data objects, in the appropriate virtual dataset
+    my @ids;
+    foreach my $citedata ( @results )
+    {
+	$citedata->{datestamp} = EPrints::Time::get_iso_timestamp();
+	my $dataobj = $plugin->epdata_to_dataobj( $opts{dataset}, $citedata );
+	if( defined $dataobj )
+	{
+	    push @ids, $dataobj->get_id;
+	}
+    }
+
+    return \@ids;
+}
+
+sub _log_response
+{
+    &EPrints::Plugin::Import::CitationService::ScopusLookup::_log_response
+}
+
+sub _call
+{
+    &EPrints::Plugin::Import::CitationService::ScopusLookup::_call
 }
 
 sub _query
@@ -129,10 +153,7 @@ sub _query
 		      %params
     );
 
-    # FIXME
-    my $RETRIES = 2;
-    my $DELAY = 30;
-    my $response = EPrints::Plugin::Import::CitationService::ScopusLookup::_call( $plugin, $uri, $RETRIES, $DELAY );
+    my $response = $plugin->_call( $uri, $plugin->{net_retry}->{max}, $plugin->{net_retry}->{interval} );
 
     if( !defined( $response ) )
     {
@@ -276,7 +297,7 @@ sub _query
 	    $plugin->error( "no citation count in response for $eprintid !?" );
 	    next EPRINT;
 	}
-	push @hits, { cluster => $new_eid, impact => $citation_count };
+	push @hits, { referent_id => $eprintid, cluster => $new_eid, impact => $citation_count };
     }
 
     return @hits;
