@@ -50,10 +50,11 @@ use URI;
 our $DEBUG;
 
 # service endpoints and namespaces - these can be locally defined (e.g. if you have a Premium account)
-our $WOK_CONF = { 'LAMR_ENDPOINT'=>'https://ws.isiknowledge.com/cps/xrpc',
-		  'AUTH_USERNAME'=>undef,
-		  'AUTH_PASSWORD'=>undef,
-		};
+our $WOK_CONF = {
+		  'LAMR_ENDPOINT' => 'https://ws.isiknowledge.com/cps/xrpc',
+		  'AUTH_USERNAME' => undef,
+		  'AUTH_PASSWORD' => undef,
+};
 
 #
 # Create a new plug-in object.
@@ -122,30 +123,30 @@ sub _get_query_xml
 
     # WHO'S REQUESTING
     my $map1 = $session->make_element( 'map' );
-    $map1->appendChild( $session->render_data_element( 0, 'val', $WOK_CONF->{AUTH_USERNAME}, 'name'=>'username' ) );
-    $map1->appendChild( $session->render_data_element( 0, 'val', $WOK_CONF->{AUTH_PASSWORD}, 'name'=>'password' ) );
+    $map1->appendChild( $session->render_data_element( 0, 'val', $WOK_CONF->{AUTH_USERNAME}, 'name' => 'username' ) );
+    $map1->appendChild( $session->render_data_element( 0, 'val', $WOK_CONF->{AUTH_PASSWORD}, 'name' => 'password' ) );
 
     # WHAT'S REQUESTED
     my $map2 = $session->make_element( 'map' );
-    my $data_list = $session->make_element( 'list', 'name'=>'WOS' );
+    my $data_list = $session->make_element( 'list', 'name' => 'WOS' );
     $data_list->appendChild( $session->render_data_element( 0, 'val', 'timesCited' ) );
     $data_list->appendChild( $session->render_data_element( 0, 'val', 'ut' ) );
     $map2->appendChild( $data_list );
 
     # LOOKUP DATA
     my $map3 = $session->make_element( 'map' );
-    my $cite_map = $session->make_element( 'map', 'name'=>"cite_$eprintid" );
+    my $cite_map = $session->make_element( 'map', 'name' => "cite_$eprintid" );
     if( $eprint->is_set( 'wos_cluster' ) )
     {
 	# Search by UT
 	my $ut = $eprint->get_value( 'wos_cluster' );
 	return undef if $ut eq '-';
-	$cite_map->appendChild( $session->render_data_element( 0, 'val', $ut, 'name'=>'ut' ) );
+	$cite_map->appendChild( $session->render_data_element( 0, 'val', $ut, 'name' => 'ut' ) );
     }
     elsif( $valid_doi )
     {
 	# Search by DOI
-	$cite_map->appendChild( $session->render_data_element( 0, 'val', $valid_doi, 'name'=>'doi' ) );
+	$cite_map->appendChild( $session->render_data_element( 0, 'val', $valid_doi, 'name' => 'doi' ) );
     }
     else
     {
@@ -154,17 +155,17 @@ sub _get_query_xml
 
 	#$cite_map->appendChild( $session->render_data_element( 0, 'val', $title, 'name'=>'atitle' ) );
 	# URGH
-	my $title_elem = $session->make_element( 'val', 'name'=>'atitle' );
+	my $title_elem = $session->make_element( 'val', 'name' => 'atitle' );
 	$title_elem->appendChild( $session->xml->create_cdata_section( $title ) );
 	$cite_map->appendChild( $title_elem );
 
 	if( $eprint->is_set( 'date' ) )
 	{
 	    my $year = substr( $eprint->get_value( 'date' ), 0, 4 );
-	    $cite_map->appendChild( $session->render_data_element( 0, 'val', $year, 'name'=>'year' ) );
+	    $cite_map->appendChild( $session->render_data_element( 0, 'val', $year, 'name' => 'year' ) );
 	}
 
-	my $author_list = $session->make_element( 'list', 'name'=>'authors' );
+	my $author_list = $session->make_element( 'list', 'name' => 'authors' );
 	my $creators = $eprint->get_value( 'creators_name' );
 	foreach my $creator ( @{$creators} )
 	{
@@ -211,9 +212,9 @@ sub _post_query
     }
 
     my $request = HTTP::Request->new( 'POST', $WOK_CONF->{LAMR_ENDPOINT} );
-    $request->header( 'accept'=>'application/xml' );
-    $request->header( 'content-type'=>'application/xml;charset=utf-8' );
-    $request->header( 'content-length'=>length( $query ) );
+    $request->header( 'accept'         => 'application/xml' );
+    $request->header( 'content-type'   => 'application/xml;charset=utf-8' );
+    $request->header( 'content-length' => length( $query ) );
     $request->content( $query );
 
     my $response = $ua->request( $request );
@@ -299,8 +300,7 @@ sub get_epdata
     my $cite_data = $inner_map->getChildrenByTagName( 'map' )->[ 0 ];
     if( !defined $cite_data )
     {
-	$plugin->warning(
-			"Unable to retrieve data from WoS for eprint $eprintid. The response has no citation <map/> element." ) if $DEBUG;
+	$plugin->warning( "Unable to retrieve data from WoS for eprint $eprintid. The response has no citation <map/> element." ) if $DEBUG;
 	return undef;
     }
 
@@ -332,21 +332,20 @@ sub get_epdata
 	if( $DEBUG )
 	{
 	    $timesCited //= '';
-	    $ut //= '';
+	    $ut         //= '';
 	    if( $message )
 	    {
 		$plugin->warning( "Unable to retrieve data from WoS for eprint $eprintid. The message was: $message" );
 	    }
 	    else
 	    {
-	    $plugin->warning(
-"Unable to retrieve data from WoS for eprint $eprintid. The response was missing data: timesCited=$timesCited, ut=$ut" );
+		$plugin->warning( "Unable to retrieve data from WoS for eprint $eprintid. The response was missing data: timesCited=$timesCited, ut=$ut" );
 	    }
 	}
 	return undef;
     }
 
-    return { cluster=>$ut, impact=>$timesCited };
+    return { cluster => $ut, impact => $timesCited };
 }
 
 1;

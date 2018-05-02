@@ -9,7 +9,7 @@ use LWP::UserAgent;
 use Unicode::Normalize qw(NFKC);
 use URI;
 
-my $COUNTAPI  = URI->new( 'https://api.elsevier.com/content/abstract/citation-count' );  # https://api.elsevier.com/documentation/AbstractCitationCountAPI.wadl
+my $COUNTAPI = URI->new( 'https://api.elsevier.com/content/abstract/citation-count' );    # https://api.elsevier.com/documentation/AbstractCitationCountAPI.wadl
 
 my $BATCHSIZE = 50;
 
@@ -33,7 +33,7 @@ sub new
 
     # Plugin-specific net_retry parameters (command line > config > default)
     my $net_retry = $self->{session}->get_conf( 'scapi', 'net_retry' ) || {};
-    $net_retry->{max} //= 4;
+    $net_retry->{max}      //= 4;
     $net_retry->{interval} //= 30;
     foreach my $k ( keys %{$net_retry} )
     {
@@ -83,7 +83,7 @@ sub process_eprints
 		if( $eid ne '-' )
 		{
 		    push @eids, $eid;
-		    $eid_map->{ $eid } = $eprint;
+		    $eid_map->{$eid} = $eprint;
 		}
 		next EPRINT;
 	    }
@@ -95,7 +95,7 @@ sub process_eprints
 		if( $doi )
 		{
 		    push @dois, $doi;
-		    $doi_map->{ $doi } = $eprint;
+		    $doi_map->{$doi} = $eprint;
 		}
 		next EPRINT;
 	    }
@@ -134,12 +134,12 @@ sub process_eprints
 
 sub _log_response
 {
-    &EPrints::Plugin::Import::CitationService::ScopusLookup::_log_response
+    &EPrints::Plugin::Import::CitationService::ScopusLookup::_log_response;
 }
 
 sub _call
 {
-    &EPrints::Plugin::Import::CitationService::ScopusLookup::_call
+    &EPrints::Plugin::Import::CitationService::ScopusLookup::_call;
 }
 
 sub _query
@@ -196,14 +196,11 @@ sub _query
 	{
 	    $status_code   ||= '-';
 	    $status_detail ||= '-';
-	    $plugin->error(
-"Scopus responded with error condition for <$uri>: [$code] $status_code, $status_detail, Request URL: "
-		  . $quri->as_string );
+	    $plugin->error( "Scopus responded with error condition for <$uri>: [$code] $status_code, $status_detail, Request URL: " . $quri->as_string );
 	}
 	else
 	{
-	    $plugin->warning(
-		 "Unable to parse response XML for <$uri>: [$code] Request URL: " . $quri->as_string . "\n$body" );
+	    $plugin->warning( "Unable to parse response XML for <$uri>: [$code] Request URL: " . $quri->as_string . "\n$body" );
 	}
 	return undef;
     };
@@ -218,14 +215,11 @@ sub _query
 	{
 	    $status_code   ||= '-';
 	    $status_detail ||= '-';
-	    $plugin->error(
-"Scopus responded with error condition for <$uri>: [$code] $status_code, $status_detail, Request URL: "
-		  . $quri->as_string );
+	    $plugin->error( "Scopus responded with error condition for <$uri>: [$code] $status_code, $status_detail, Request URL: " . $quri->as_string );
 	}
 	else
 	{
-	    $plugin->error( "Scopus responded with unknown error condition for <$uri>: [$code] Request URL: " .
-			    $quri->as_string . "\n" . $response_xml->toString );
+	    $plugin->error( "Scopus responded with unknown error condition for <$uri>: [$code] Request URL: " . $quri->as_string . "\n" . $response_xml->toString );
 	}
 	return undef;
     }
@@ -234,14 +228,16 @@ sub _query
   EPRINT: foreach my $document ( @{ $response_xml->getElementsByLocalName( 'document' ) } )
     {
 	my $docstatus = $document->getAttribute( 'status' );
-	next EPRINT if EPrints::Utils::is_set( $docstatus ) && $docstatus ne 'found'; # FIXME: what does unset mean?
+	next EPRINT if EPrints::Utils::is_set( $docstatus ) && $docstatus ne 'found';    # FIXME: what does unset mean?
 
 	my $key = $plugin->_extract( $document, $element );
 	next EPRINT unless $key;
+
 	# TODO: unescape?
 
-	my $eprint = $map->{ $key };
-	if( !$eprint) {
+	my $eprint = $map->{$key};
+	if( !$eprint )
+	{
 	    $plugin->error( "returned citations for eprint with $fieldname=$key, but there's no such record in the map" );
 	    next EPRINT;
 	}
@@ -282,12 +278,14 @@ sub _query
 		if( $new_doi ne $old_doi )
 		{
 		    $plugin->error( "'doi' $new_doi for $eprintid doesn't match $old_doi in database" );
+
 		    #next EPRINT; # meh, who cares, really
 		}
 	    }
 	    else
 	    {
 		$plugin->warning( "Scopus returned DOI $new_doi for $eprintid, which doesn't currently have one" );
+
 		# FIXME: set field? add to comment? ??
 	    }
 	}
@@ -328,7 +326,7 @@ sub usable_doi
 {
     my( $string, %opts ) = @_;
 
-    my $NO = ($opts{test} ? 0 : undef);
+    my $NO = ( $opts{test} ? 0 : undef );
 
     return $NO if( !EPrints::Utils::is_set( $doi ) );
 

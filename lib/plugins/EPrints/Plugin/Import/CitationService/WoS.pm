@@ -76,7 +76,8 @@ use EPrints::Plugin::Import::CitationService;
 our @ISA = ( "EPrints::Plugin::Import::CitationService" );
 
 # service endpoints and namespaces - these can be locally defined (e.g. if you have a Premium account)
-our $WOK_CONF = { 'AUTHENTICATE_ENDPOINT' => 'http://search.webofknowledge.com/esti/wokmws/ws/WOKMWSAuthenticate',
+our $WOK_CONF = {
+		  'AUTHENTICATE_ENDPOINT' => 'http://search.webofknowledge.com/esti/wokmws/ws/WOKMWSAuthenticate',
 		  'AUTHENTICATE_NS'       => 'http://auth.cxf.wokmws.thomsonreuters.com',
 		  'WOKSEARCH_ENDPOINT'    => 'http://search.webofknowledge.com/esti/wokmws/ws/WokSearch',
 		  'WOKSEARCH_NS'          => 'http://woksearch.cxf.wokmws.thomsonreuters.com',
@@ -136,7 +137,7 @@ sub new
 
     # Plugin-specific net_retry parameters (command line > config > default)
     my $default_net_retry = $self->{session}->get_conf( 'wos', 'net_retry' );
-    $default_net_retry->{max} //= 4;
+    $default_net_retry->{max}      //= 4;
     $default_net_retry->{interval} //= 900;
     foreach my $k ( keys %{$default_net_retry} )
     {
@@ -156,9 +157,7 @@ sub new
     $self->{soap_editions} = [];
     foreach my $edition ( @$editions )
     {
-	push $self->{soap_editions},
-	  SOAP::Data->name( "editions" =>
-		\SOAP::Data->value( SOAP::Data->name( "collection" => "WOS" ), SOAP::Data->name( "edition" => "$edition" ), ) );
+	push $self->{soap_editions}, SOAP::Data->name( "editions" => \SOAP::Data->value( SOAP::Data->name( "collection" => "WOS" ), SOAP::Data->name( "edition" => "$edition" ), ) );
     }
 
     # the query language is always English
@@ -303,11 +302,7 @@ sub get_search_for_eprint
 	$date_begin = ( $date - 1 ) . "-01-01";
 	$date_end   = ( $date + 1 ) . "-12-31";
     }
-    my $date_param = SOAP::Data->name(
-	  "timeSpan" =>
-	    \SOAP::Data->value( SOAP::Data->name( "begin" )->value( $date_begin ), SOAP::Data->name( "end" )->value( $date_end )
-	    )
-    );
+    my $date_param = SOAP::Data->name( "timeSpan" => \SOAP::Data->value( SOAP::Data->name( "begin" )->value( $date_begin ), SOAP::Data->name( "end" )->value( $date_end ) ) );
 
     # Build SOAP call
     my @query_params;
@@ -316,8 +311,7 @@ sub get_search_for_eprint
     # Force the Data object to a string so special chars are
     # encoded properly during serialisation and then add the xsd
     # namespace declarataion to stop the server complaining
-    push @query_params,
-      SOAP::Data->name( "userQuery" => $q )->type( 'string' )->attr( { "xmlns:xsd" => "http://www.w3.org/2001/XMLSchema" } );
+    push @query_params, SOAP::Data->name( "userQuery" => $q )->type( 'string' )->attr( { "xmlns:xsd" => "http://www.w3.org/2001/XMLSchema" } );
 
     push @query_params, @{ $plugin->{soap_editions} };
     push @query_params, $date_param;
@@ -342,9 +336,7 @@ sub get_search_for_eprint
 
     my $service = $WOK_CONF->{SERVICE_TYPE};
 
-    my $som = $plugin->call( $soap, 0,
-			     SOAP::Data->name( "$service:search" )
-			       ->attr( { "xmlns:$service" => "http://$service.v3.wokmws.thomsonreuters.com" } ) => @params );
+    my $som = $plugin->call( $soap, 0, SOAP::Data->name( "$service:search" )->attr( { "xmlns:$service" => "http://$service.v3.wokmws.thomsonreuters.com" } ) => @params );
 
     if( $som->fault() )
     {
@@ -356,8 +348,7 @@ sub get_search_for_eprint
 
 	# MG To Do: it would be useful to log the serialized call
 	# here - logging the userQuery is a good start.
-	$plugin->error( "Unable to retrieve UID from Web of Science(R) for EPrint ID " .
-			$eprint->get_id . ": \n" . $plugin->_get_som_error( $som ) . ", userQuery = $q" );
+	$plugin->error( "Unable to retrieve UID from Web of Science(R) for EPrint ID " . $eprint->get_id . ": \n" . $plugin->_get_som_error( $som ) . ", userQuery = $q" );
 	return undef;
     }
 
@@ -438,11 +429,7 @@ sub get_cites_for_identifier
 	$date_begin = ( substr( $eprint->get_value( "date" ), 0, 4 ) - 1 ) . "-01-01";
     }
     my $date_end = substr( EPrints::Time::get_iso_timestamp(), 0, 10 );
-    my $date_param = SOAP::Data->name(
-	  "timeSpan" =>
-	    \SOAP::Data->value( SOAP::Data->name( "begin" )->value( $date_begin ), SOAP::Data->name( "end" )->value( $date_end )
-	    )
-    );
+    my $date_param = SOAP::Data->name( "timeSpan" => \SOAP::Data->value( SOAP::Data->name( "begin" )->value( $date_begin ), SOAP::Data->name( "end" )->value( $date_end ) ) );
 
     # configure what we want to retrieve
     my $retrieve_params = SOAP::Data->value(
@@ -468,13 +455,11 @@ sub get_cites_for_identifier
 
     my $service = $WOK_CONF->{SERVICE_TYPE};
 
-    $som = $plugin->call( $soap, 0,
-			  SOAP::Data->name( "$service:citingArticles" )
-			    ->attr( { "xmlns:$service" => "http://$service.v3.wokmws.thomsonreuters.com" } ) => @params );
+    $som = $plugin->call( $soap, 0, SOAP::Data->name( "$service:citingArticles" )->attr( { "xmlns:$service" => "http://$service.v3.wokmws.thomsonreuters.com" } ) => @params );
 
     if( $som->fault() )
     {
-# sf2 / we can catch InvalidInputException here which is thrown when WoS doesn't know the id/UT. In this case we just need to search for that eprint again.
+	# sf2 / we can catch InvalidInputException here which is thrown when WoS doesn't know the id/UT. In this case we just need to search for that eprint again.
 	my $fault = $som->faultdetail();
 	if( defined $fault && ref( $fault ) eq 'HASH' && exists $fault->{InvalidInputException} )
 	{
@@ -489,8 +474,7 @@ sub get_cites_for_identifier
 
 	# MG To do: it would be useful to log the serialized call
 	# here if the faultcode eq 'Client'
-	die( "Unable to retrieve cites for EPrint ID " .
-	     $eprint->get_id . " from Web of Science: \n" . $plugin->_get_som_error( $som ) );
+	die( "Unable to retrieve cites for EPrint ID " . $eprint->get_id . " from Web of Science: \n" . $plugin->_get_som_error( $som ) );
     }
 
     # we will need the identifier again later, so save it in the result
@@ -518,7 +502,8 @@ sub response_to_epdata
 	die( 'Unable to parse citingArticles response from WoS' );
     }
 
-    return { cluster => $response->{ut},
+    return {
+	     cluster => $response->{ut},
 	     impact  => $response->{recordsFound},
     };
 }
@@ -547,10 +532,7 @@ sub get_session
     # sf2 / using custom type as the WoS WS doesn't like the
     # attributes added by SOAP::Lite.  this will call
     # SOAP::Serializer::as_authenticate (see below)
-    my $som =
-      $plugin->call( $soap, 1,
-	     SOAP::Data->name( 'auth' )->prefix( 'auth' )->uri( $WOK_CONF->{AUTHENTICATE_NS} )->type( 'authenticate' => undef ),
-	     1 );
+    my $som = $plugin->call( $soap, 1, SOAP::Data->name( 'auth' )->prefix( 'auth' )->uri( $WOK_CONF->{AUTHENTICATE_NS} )->type( 'authenticate' => undef ), 1 );
 
     if( $som->fault() )
     {
@@ -589,9 +571,7 @@ sub dispose
 	# sf2 / using custom type as the WoS WS doesn't like
 	# the attributes added by SOAP::Lite.  this will call
 	# SOAP::Serializer::as_closeSession (see below)
-	my $som =
-	  $soap->call( SOAP::Data->name( 'closeSession' )->prefix( 'auth' )->uri( $WOK_CONF->{AUTHENTICATE_NS} )
-		       ->type( 'closeSession' => undef ) );
+	my $som = $soap->call( SOAP::Data->name( 'closeSession' )->prefix( 'auth' )->uri( $WOK_CONF->{AUTHENTICATE_NS} )->type( 'closeSession' => undef ) );
 
 	if( $som->fault() )
 	{
@@ -652,8 +632,7 @@ sub call
 	{
 	    # Assume this is a transport error, go to sleep before
 	    # trying again
-	    $plugin->warning( "Problem connecting to the WoS server: \n" .
-			      $@ . ".\nWaiting " . $plugin->{net_retry}->{interval} . " seconds before trying again." );
+	    $plugin->warning( "Problem connecting to the WoS server: \n" . $@ . ".\nWaiting " . $plugin->{net_retry}->{interval} . " seconds before trying again." );
 	    sleep( $plugin->{net_retry}->{interval} );
 	    $som = undef;
 	};

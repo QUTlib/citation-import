@@ -400,14 +400,11 @@ sub get_epdata
 	{
 	    $status_code   ||= '-';
 	    $status_detail ||= '-';
-	    $plugin->error(
-"Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: "
-		  . $quri->as_string );
+	    $plugin->error( "Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: " . $quri->as_string );
 	}
 	else
 	{
-	    $plugin->warning(
-		 "Unable to parse response XML for EPrint ID $eprintid: [$code] Request URL: " . $quri->as_string . "\n$body" );
+	    $plugin->warning( "Unable to parse response XML for EPrint ID $eprintid: [$code] Request URL: " . $quri->as_string . "\n$body" );
 	}
 	return undef;
     };
@@ -422,14 +419,11 @@ sub get_epdata
 	{
 	    $status_code   ||= '-';
 	    $status_detail ||= '-';
-	    $plugin->error(
-"Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: "
-		  . $quri->as_string );
+	    $plugin->error( "Scopus responded with error condition for EPrint ID $eprintid: [$code] $status_code, $status_detail, Request URL: " . $quri->as_string );
 	}
 	else
 	{
-	    $plugin->error( "Scopus responded with unknown error condition for EPrint ID $eprintid: [$code] Request URL: " .
-			    $quri->as_string . "\n" . $response_xml->toString );
+	    $plugin->error( "Scopus responded with unknown error condition for EPrint ID $eprintid: [$code] Request URL: " . $quri->as_string . "\n" . $response_xml->toString );
 	}
 	return undef;
     }
@@ -452,8 +446,7 @@ sub get_response_status
     my( $plugin, $response_xml ) = @_;
 
     my $status = $response_xml->documentElement->getChildrenByTagName( 'status' )->[ 0 ];
-    return ( $status->getChildrenByTagName( 'statusCode' )->[ 0 ]->textContent,
-	     $status->getChildrenByTagName( 'statusText' )->[ 0 ]->textContent, );
+    return ( $status->getChildrenByTagName( 'statusCode' )->[ 0 ]->textContent, $status->getChildrenByTagName( 'statusText' )->[ 0 ]->textContent, );
 }
 
 # ##
@@ -496,13 +489,11 @@ sub response_to_epdata
     {
 	if( $fallback_cluster )
 	{
-	    $plugin->error( "Scopus responded with no 'eid' in entry for $eprintid, fallback='$fallback_cluster'. XML:\n" .
-			    $response_xml->toString );
+	    $plugin->error( "Scopus responded with no 'eid' in entry for $eprintid, fallback='$fallback_cluster'. XML:\n" . $response_xml->toString );
 	}
 	else
 	{
-	    $plugin->error( "Scopus responded with no 'eid' in entry for $eprintid, and there is no fallback. XML:\n" .
-			    $response_xml->toString );
+	    $plugin->error( "Scopus responded with no 'eid' in entry for $eprintid, and there is no fallback. XML:\n" . $response_xml->toString );
 	    return undef;
 	}
     }
@@ -516,8 +507,7 @@ sub response_to_epdata
 	# This is a fatal error -- either we have the wrong eid stored in the database,
 	# or Scopus returned citation counts for the wrong record.  Either way, manual
 	# intervention will be required.
-	$plugin->error(
-		  "Scopus returned an 'eid' {$cluster} for $eprintid that doesn't match the existing one {$fallback_cluster}" );
+	$plugin->error( "Scopus returned an 'eid' {$cluster} for $eprintid that doesn't match the existing one {$fallback_cluster}" );
 	return undef;
     }
 
