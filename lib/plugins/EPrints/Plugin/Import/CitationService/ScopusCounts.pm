@@ -9,7 +9,7 @@ use LWP::UserAgent;
 use Unicode::Normalize qw(NFKC);
 use URI;
 
-my $COUNTAPI  = URI->new( 'http://api.elsevier.com/content/abstract/citation-count' );  # https://api.elsevier.com/documentation/AbstractCitationCountAPI.wadl
+my $COUNTAPI  = URI->new( 'https://api.elsevier.com/content/abstract/citation-count' );  # https://api.elsevier.com/documentation/AbstractCitationCountAPI.wadl
 
 my $BATCHSIZE = 50;
 
