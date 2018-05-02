@@ -233,7 +233,8 @@ sub _query
     my @hits;
   EPRINT: foreach my $document ( @{ $response_xml->getElementsByLocalName( 'document' ) } )
     {
-	# TODO: ensure status="found"?
+	my $docstatus = $document->getAttribute( 'status' );
+	next EPRINT if EPrints::Utils::is_set( $docstatus ) && $docstatus ne 'found'; # FIXME: what does unset mean?
 
 	my $key = $plugin->_extract( $document, $element );
 	next EPRINT unless $key;
